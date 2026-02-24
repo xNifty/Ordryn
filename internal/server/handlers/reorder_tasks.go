@@ -7,10 +7,22 @@ import (
 	"GoTodo/internal/tasks"
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
 )
+
+// isXHR reports whether the request came from HTMX or a classic XHR/fetch client.
+func isXHR(r *http.Request) bool {
+	if r.Header.Get("HX-Request") == "true" {
+		return true
+	}
+	if strings.ToLower(r.Header.Get("X-Requested-With")) == "xmlhttprequest" {
+		return true
+	}
+	return false
+}
 
 // APIReorderTasks updates positions for tasks within a favorite/non-favorite group
 func APIReorderTasks(w http.ResponseWriter, r *http.Request) {
@@ -54,8 +66,29 @@ func APIReorderTasks(w http.ResponseWriter, r *http.Request) {
 	}
 
 	email, _, _, timezone, loggedIn, _ := utils.GetSessionUserWithTimezone(r)
+
+	// Optional project filter (read early so validation and selection respect it)
+	projectParam := r.FormValue("project")
+	if projectParam == "" {
+		projectParam = r.URL.Query().Get("project")
+	}
+
+	// Log the request for diagnostics
+	log.Printf("APIReorderTasks called: remote=%s user=%s loggedIn=%v order=%q page=%d project=%q",
+		r.RemoteAddr, email, loggedIn, order, page, projectParam)
+
+	// For XHR/HTMX clients, return a clean 401 instead of a redirect when not logged in.
 	if !loggedIn {
-		w.WriteHeader(http.StatusUnauthorized)
+		log.Printf("APIReorderTasks: unauthorized request from %s (user=%s); returning 401 for XHR=%v",
+			r.RemoteAddr, email, isXHR(r))
+		if isXHR(r) {
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			w.WriteHeader(http.StatusUnauthorized)
+			fmt.Fprint(w, "unauthorized")
+			return
+		}
+		// Non-XHR fallback: redirect to base path (preserve previous UX for browser navigations)
+		http.Redirect(w, r, utils.GetBasePath(), http.StatusSeeOther)
 		return
 	}
 
@@ -63,6 +96,10 @@ func APIReorderTasks(w http.ResponseWriter, r *http.Request) {
 	if isBanned, err := storage.IsUserBanned(email); err == nil && isBanned {
 		sessionstore.ClearSessionCookie(w, r)
 		basePath := utils.GetBasePath()
+		log.Printf("APIReorderTasks: banned user %s from %s - clearing session and responding with HX-Redirect=%s",
+			email, r.RemoteAddr, basePath)
+
+		// For HTMX clients we communicate navigation via HX-Redirect header; do not issue a 3xx.
 		w.Header().Set("HX-Redirect", basePath)
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprint(w, " ")
@@ -87,11 +124,6 @@ func APIReorderTasks(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Optional project filter (read early so validation and selection respect it)
-	projectParam := r.FormValue("project")
-	if projectParam == "" {
-		projectParam = r.URL.Query().Get("project")
-	}
 	var projectFilter *int
 	if projectParam != "" {
 		if projectParam == "none" || projectParam == "0" {

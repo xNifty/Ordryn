@@ -53,12 +53,47 @@ export function initSortable() {
             }
           } catch (e) {}
 
-          fetch(apiPath("/api/reorder-tasks"), { method: "POST", body: form })
+          // Send HX-Request and X-Requested-With so server middleware accepts this as an XHR/HTMX call
+          fetch(apiPath("/api/reorder-tasks"), {
+            method: "POST",
+            headers: {
+              "HX-Request": "true",
+              "X-Requested-With": "XMLHttpRequest",
+              // Keep content-type unset when sending URLSearchParams body; browser will set it.
+            },
+            body: form,
+            redirect: "follow",
+          })
             .then((resp) => {
-              if (resp.ok) return resp.text();
-              throw new Error("Failed to save order");
+              // If the request was redirected (server issued 3xx), don't inject the returned full page:
+              if (resp.redirected) {
+                // Top-level navigate to the final location
+                window.location.href = resp.url;
+                return null;
+              }
+
+              // Respect HX-Redirect if server used it for HTMX flows
+              const hxRedirect = resp.headers.get("HX-Redirect") || resp.headers.get("Hx-Redirect");
+              if (hxRedirect) {
+                window.location.href = hxRedirect;
+                return null;
+              }
+
+              if (!resp.ok) {
+                throw new Error("Failed to save order: " + resp.status);
+              }
+              return resp.text();
             })
             .then((html) => {
+              if (!html) return;
+              // Defensive: if server returned a full document instead of the fragment, reload instead of injecting
+              const lower = html.slice(0, 600).toLowerCase();
+              if (lower.includes("<html") || lower.includes("<body") || lower.includes("<nav") || lower.includes("gotodo")) {
+                // Avoid injecting an entire page into the task container — reload to get a clean page
+                window.location.reload();
+                return;
+              }
+
               // Replace task container with returned HTML
               const container = document.getElementById("task-container");
               if (container) {
