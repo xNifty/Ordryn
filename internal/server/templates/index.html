@@ -185,10 +185,8 @@
                         <option value="3" {{if eq .PriorityFilter "3"}}selected{{end}}>High</option>
                     </select>
                     <button type="button" class="btn btn-sm {{if eq .SortFilter "priority"}}btn-primary{{else}}btn-outline-primary{{end}}" id="sort-priority-btn"
-                        hx-get="{{basePath}}/api/fetch-tasks?page=1"
-                        hx-vals='js:{"sort": document.getElementById("sort-filter") && document.getElementById("sort-filter").value === "priority" ? "" : "priority"}'
-                        hx-include="#project-filter, #status-filter, #due-filter, #priority-filter, #search"
-                        hx-target="#task-container" hx-swap="innerHTML">
+                        aria-pressed="{{if eq .SortFilter "priority"}}true{{else}}false{{end}}"
+                        title="{{if eq .SortFilter "priority"}}Sorted by priority (high first). Click to restore manual drag order.{{else}}Sorted by manual order. Click to sort by priority (high first).{{end}}">
                         {{if eq .SortFilter "priority"}}Sort: Priority{{else}}Sort: Manual{{end}}
                     </button>
                 </div>
