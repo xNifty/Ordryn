@@ -43,7 +43,7 @@
                     </p>
 
                     <form
-                        hx-post="{{basePath}}/api/import"
+                        hx-post="{{basePath}}/api/import/preview"
                         hx-encoding="multipart/form-data"
                         hx-target="#import-result"
                         hx-swap="innerHTML"
@@ -54,7 +54,7 @@
                             <input type="file" id="import-file" name="file" class="form-control" accept=".csv,text/csv" required />
                         </div>
                         <button type="submit" class="btn btn-primary">
-                            <i class="bi bi-upload"></i> Import
+                            <i class="bi bi-eye"></i> Preview import
                         </button>
                         <a href="{{basePath}}/" class="btn btn-outline-secondary ms-2">Back to tasks</a>
                     </form>

@@ -93,6 +93,38 @@
                                 </div>
                             </form>
 
+                            <!-- Calendar feed -->
+                            <div class="mt-4 pt-4 border-top">
+                                <h4 class="mb-3">Calendar feed</h4>
+                                <p class="text-muted small">
+                                    Subscribe to incomplete tasks with due dates in any calendar app. Read-only — changes in your calendar app are not synced back.
+                                </p>
+                                <div id="calendar-feed-block">
+                                    {{if .CalendarFeedURL}}
+                                    <label for="calendar-feed-url" class="form-label fw-bold">Subscribe URL</label>
+                                    <div class="input-group mb-2">
+                                        <input type="text" class="form-control" id="calendar-feed-url" readonly value="{{.CalendarFeedURL}}" />
+                                        <button type="button" class="btn btn-outline-secondary" id="copy-calendar-url" data-url="{{.CalendarFeedURL}}">
+                                            <i class="bi bi-clipboard"></i> Copy
+                                        </button>
+                                    </div>
+                                    {{else}}
+                                    <p class="text-muted">Calendar link unavailable. Save your profile or try again later.</p>
+                                    {{end}}
+                                </div>
+                                <button
+                                    type="button"
+                                    class="btn btn-outline-warning btn-sm"
+                                    id="regenerate-calendar-token"
+                                    hx-post="{{basePath}}/api/calendar/regenerate-token"
+                                    hx-target="#calendar-feed-block"
+                                    hx-swap="innerHTML"
+                                >
+                                    <i class="bi bi-arrow-repeat"></i> Regenerate link
+                                </button>
+                                <p class="text-muted small mt-2 mb-0">Regenerating invalidates any existing subscription URL.</p>
+                            </div>
+
                             <!-- Password Change Section -->
                             <div class="mt-4 pt-4 border-top">
                                 <h4 class="mb-3">Change Password</h4>
@@ -143,6 +175,19 @@
             document.addEventListener('DOMContentLoaded', function() {
                 const theme = localStorage.getItem('theme') || 'light';
                 document.documentElement.setAttribute('data-theme', theme);
+
+                document.body.addEventListener('click', function(e) {
+                    const btn = e.target.closest('#copy-calendar-url');
+                    if (!btn) return;
+                    const url = btn.dataset.url || (document.getElementById('calendar-feed-url') || {}).value;
+                    if (!url) return;
+                    navigator.clipboard.writeText(url).then(function() {
+                        btn.innerHTML = '<i class="bi bi-check-lg"></i> Copied';
+                        setTimeout(function() {
+                            btn.innerHTML = '<i class="bi bi-clipboard"></i> Copy';
+                        }, 2000);
+                    }).catch(function() {});
+                });
             });
 
             document.getElementById('profileForm').addEventListener('submit', async function(e) {

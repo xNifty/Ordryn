@@ -49,6 +49,10 @@ func RunMigrations() error {
 		fmt.Printf("migration: MigrateUsersAddIsBanned failed: %v\n", err)
 		errCount++
 	}
+	if err := MigrateUsersAddCalendarToken(); err != nil {
+		fmt.Printf("migration: MigrateUsersAddCalendarToken failed: %v\n", err)
+		errCount++
+	}
 	if err := MigrateTasksAddIsFavorite(); err != nil {
 		fmt.Printf("migration: MigrateTasksAddIsFavorite failed: %v\n", err)
 		errCount++

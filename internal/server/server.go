@@ -105,10 +105,13 @@ func StartServer() error {
 	http.HandleFunc("/api/projects/delete", utils.RequireHTMX(utils.RequireAuth(handlers.APIDeleteProject)))
 	http.HandleFunc("/api/projects/json", utils.RequireHTMX(utils.RequireAuth(handlers.APIProjectsJSON)))
 	http.HandleFunc("/api/bulk-update", utils.RequireHTMX(utils.RateLimitMiddleware(60, 1.0, 60, utils.KeyByUser)(handlers.APIBulkUpdate)))
+	http.HandleFunc("/api/undo-delete", utils.RequireHTMX(utils.RequireAuth(handlers.APIUndoDelete)))
 	http.HandleFunc("/api/task-events", utils.RequireHTMX(utils.RequireAuth(handlers.APITaskEvents)))
 	http.HandleFunc("/api/users", utils.RequireHTMX(utils.RequirePermission("admin", handlers.APIGetUsers)))
 	http.HandleFunc("/api/export", utils.RequireAuth(handlers.APIExportTasks))
-	http.HandleFunc("/api/import", utils.RequireHTMX(utils.RequireAuth(handlers.APIImportTasks)))
+	http.HandleFunc("/api/import/preview", utils.RequireHTMX(utils.RequireAuth(handlers.APIImportPreview)))
+	http.HandleFunc("/api/import/confirm", utils.RequireHTMX(utils.RequireAuth(handlers.APIImportConfirm)))
+	http.HandleFunc("/api/import/cancel", utils.RequireHTMX(utils.RequireAuth(handlers.APIImportCancel)))
 	http.HandleFunc("/api/validate-description", utils.RequireHTMX(handlers.ValidateDescription))
 	http.HandleFunc("/api/tags/json", utils.RequireAuth(handlers.APITagsJSON))
 	http.HandleFunc("/api/tags/update", utils.RequireHTMX(utils.RequireAuth(handlers.APIUpdateTag)))
@@ -119,6 +122,10 @@ func StartServer() error {
 	http.HandleFunc("/api/update-timezone", utils.RequireHTMX(handlers.APIUpdateTimezone))
 	http.HandleFunc("/api/update-profile", utils.RequireHTMX(handlers.APIUpdateProfile))
 	http.HandleFunc("/api/change-password", utils.RequireHTMX(handlers.APIChangePassword))
+	http.HandleFunc("/api/calendar/regenerate-token", utils.RequireHTMX(utils.RequireAuth(handlers.APICalendarRegenerateToken)))
+
+	// Public calendar feed (no auth; token in URL)
+	http.HandleFunc("/cal/", handlers.CalendarFeedHandler)
 
 	// Invite API endpoints
 	http.HandleFunc("/api/create-invite", utils.RequireHTMX(utils.RequirePermission("createinvites", handlers.APICreateInvite)))

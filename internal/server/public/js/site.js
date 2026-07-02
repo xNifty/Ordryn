@@ -47,6 +47,7 @@ import {
 import { initAnnouncementCharCounter } from "./modules/admin.js";
 import { initDescriptionToggles } from "./modules/descriptions.js";
 import { initBulkActions } from "./modules/bulk.js";
+import { initUndoDelete } from "./modules/undo.js";
 
 function configureHtmxCSP() {
   if (typeof htmx === "undefined") return;
@@ -87,6 +88,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initAnnouncementCharCounter();
   initDescriptionToggles();
   initBulkActions();
+  initUndoDelete();
   initKeyboardShortcuts();
   initRevealTokenButtons();
 

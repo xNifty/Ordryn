@@ -191,6 +191,21 @@ func MigrateUsersAddIsBanned() error {
 	return nil
 }
 
+// MigrateUsersAddCalendarToken adds a unique calendar feed token column to users.
+func MigrateUsersAddCalendarToken() error {
+	pool, err := OpenDatabase()
+	if err != nil {
+		return fmt.Errorf("failed to open database: %v", err)
+	}
+	defer CloseDatabase(pool)
+
+	_, err = pool.Exec(context.Background(), "ALTER TABLE users ADD COLUMN IF NOT EXISTS calendar_token VARCHAR(64) UNIQUE")
+	if err != nil {
+		return fmt.Errorf("failed to add calendar_token column to users table: %v", err)
+	}
+	return nil
+}
+
 func CreateInvitesTable() error {
 	columns := []string{
 		"id SERIAL PRIMARY KEY",

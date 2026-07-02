@@ -107,7 +107,11 @@ export function initBulkActions() {
     }
 
     const form = new URLSearchParams();
-    form.append("action", action);
+    let serverAction = action;
+    if (action === "clear_due_date") {
+      serverAction = "set_due_date";
+    }
+    form.append("action", serverAction);
     form.append("ids", Array.from(selected).join(","));
     form.append("page", getCurrentPage());
 
@@ -127,6 +131,14 @@ export function initBulkActions() {
       const sel = document.getElementById("bulk-priority");
       if (!sel) return;
       form.append("priority", sel.value);
+    }
+    if (action === "set_due_date") {
+      const input = document.getElementById("bulk-due-date");
+      if (!input || !input.value) return;
+      form.append("due_date", input.value);
+    }
+    if (action === "clear_due_date") {
+      form.append("due_date", "");
     }
 
     fetch(apiPath("/api/bulk-update"), {
@@ -157,7 +169,11 @@ export function initBulkActions() {
           syncSortButtonState();
           syncFilterToolbarState();
         } catch (e) {}
-        if (typeof window.showToast === "function") {
+        if (action === "delete") {
+          document.body.dispatchEvent(
+            new CustomEvent("task-deleted", { detail: { count } }),
+          );
+        } else if (typeof window.showToast === "function") {
           window.showToast("Bulk action completed.");
         }
       })

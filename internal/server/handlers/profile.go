@@ -107,19 +107,27 @@ func ProfilePage(w http.ResponseWriter, r *http.Request) {
 	// fetch user to get items_per_page
 	user, _ := storage.GetUserByEmail(email)
 	itemsPerPage := 15
+	userID := utils.GetSessionUserID(r)
+	calendarFeedURL := ""
 	if user != nil && user.ItemsPerPage > 0 {
 		itemsPerPage = user.ItemsPerPage
 	}
+	if userID != nil {
+		if token, err := storage.GetOrCreateCalendarToken(*userID); err == nil {
+			calendarFeedURL = calendarFeedURLForRequest(r, token)
+		}
+	}
 
 	context := map[string]interface{}{
-		"UserEmail":    email,
-		"Email":        email,
-		"Timezone":     timezone,
-		"Status":       statusMsg,
-		"Name":         user_name,
-		"ItemsPerPage": itemsPerPage,
-		"LoggedIn":     loggedIn,
-		"Permissions":  permissions,
+		"UserEmail":       email,
+		"Email":           email,
+		"Timezone":        timezone,
+		"Status":          statusMsg,
+		"Name":            user_name,
+		"ItemsPerPage":    itemsPerPage,
+		"LoggedIn":        loggedIn,
+		"Permissions":     permissions,
+		"CalendarFeedURL": calendarFeedURL,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

@@ -1869,6 +1869,29 @@ html:not([data-theme="dark"]) .bi-pencil {
     border-left: 4px solid #dc3545;
 }
 
+.app-toast {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.app-toast-text {
+    flex: 1;
+    min-width: 0;
+}
+
+.app-toast-action {
+    flex-shrink: 0;
+    padding: 0;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.app-toast-action:hover {
+    text-decoration: underline;
+}
+
 /* Small, scoped style for changelog release tag badges */
 .releasetag {
     font-size: 0.82rem;
