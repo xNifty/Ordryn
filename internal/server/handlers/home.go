@@ -151,6 +151,7 @@ func HomeHandler(w http.ResponseWriter, r *http.Request) {
 		"CompletedTasks":       completedCount,
 		"IncompleteTasks":      incompleteCount,
 		"PasswordResetSuccess": passwordResetSuccess,
+		"Timezone":             timezone,
 	}
 
 	// Include user's projects for the sidebar project select and mark selected project
@@ -319,6 +320,7 @@ func SearchHandler(w http.ResponseWriter, r *http.Request) {
 		"ProjectFilter":    projectParam,
 		"StatusFilter":     statusFilter,
 		"Projects":         projectsList,
+		"Timezone":         timezone,
 	}
 
 	if err := utils.RenderTemplate(w, r, "pagination.html", context); err != nil {

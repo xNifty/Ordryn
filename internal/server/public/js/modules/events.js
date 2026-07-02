@@ -199,18 +199,6 @@ export function attachHTMXAfterRequestListener() {
               .catch(() => {});
           }
 
-          // If server asked to reset the toolbar project filter, do that too
-          if (trig && trig.indexOf("reset-project-filter") !== -1) {
-            try {
-              const pf = document.querySelector("select#project-filter");
-              if (pf) {
-                pf.value = "";
-                // dispatch change so HTMX will fetch the full task list
-                pf.dispatchEvent(new Event("change", { bubbles: true }));
-              }
-            } catch (e) {}
-          }
-
           // If server requested setting the toolbar project filter, apply it
           if (trig && trig.indexOf("set-project-filter") !== -1) {
             try {

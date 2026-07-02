@@ -475,6 +475,27 @@ td.delete-column {
         color: #6c757d;
     }
 
+    .due-overdue {
+        color: var(--bs-danger);
+        font-weight: 600;
+    }
+
+    .due-today {
+        color: var(--bs-warning);
+    }
+
+    .project-badge {
+        font-size: 0.7rem;
+        font-weight: normal;
+    }
+
+    @media (max-width: 600px) {
+        .project-badge {
+            display: block;
+            margin-top: 0.25rem;
+        }
+    }
+
     [data-theme="dark"] .date-added {
         color: #adb5bd;
     }

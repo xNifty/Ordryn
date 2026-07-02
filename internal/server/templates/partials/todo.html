@@ -23,10 +23,15 @@
                     {{if .Task.DateModified}}<div>Modified: {{.Task.DateModified}}</div>{{end}}
                 </div>
             </span>
+            {{if .Task.ProjectName}}
+            <span class="badge bg-secondary project-badge ms-1">{{.Task.ProjectName}}</span>
+            {{end}}
         </div>
     </td>
     <td class="desc-column" data-label="Description">{{safeHTML .Task.Description}}</td>
-    <td class="date-added" data-label="Due Date">{{.Task.DueDate}}</td>
+    <td class="date-added {{dueDateClass .Task.DueDate .Task.Completed .Timezone}}" data-label="Due Date">
+        {{if eq (dueDateClass .Task.DueDate .Task.Completed .Timezone) "due-overdue"}}<i class="bi bi-exclamation-circle"></i> {{end}}{{.Task.DueDate}}
+    </td>
     <td class="actions-column" data-label="Actions">
         <div class="d-flex align-items-center gap-2 justify-content-start">
             <!-- Status checkbox (uses existing update-status endpoint which returns complete row) -->
@@ -46,13 +51,11 @@
                 {{end}}
             </button>
 
-            {{if not .Task.Completed}}
             <button class="btn btn-link p-0 mx-2 edit-btn" style="text-decoration:none;" 
                 hx-get="{{basePath}}/api/edit?id={{.Task.ID}}&page={{.Task.Page}}&project={{.ProjectFilter}}&status={{.StatusFilter}}"
                 hx-target="#sidebar .sidebar-body" hx-swap="innerHTML" aria-label="Edit task">
                 <i class="bi bi-pencil"></i>
             </button>
-            {{end}}
 
             <button 
                 hx-get="{{basePath}}/api/confirm?id={{.Task.ID}}&page={{.Task.Page}}&project={{.ProjectFilter}}&status={{.StatusFilter}}"
