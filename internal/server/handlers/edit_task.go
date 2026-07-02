@@ -55,12 +55,6 @@ func APIEditTaskForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Only allow editing incomplete tasks
-	if completed {
-		http.Error(w, "Cannot edit a completed task.", http.StatusForbidden)
-		return
-	}
-
 	var userID int
 	if uid := utils.GetSessionUserID(r); uid != nil {
 		userID = *uid
@@ -104,6 +98,7 @@ func APIEditTaskForm(w http.ResponseWriter, r *http.Request) {
 		SidebarTitle  string
 		Error         string
 		DueDate       string
+		Completed     bool
 		Projects      []map[string]interface{}
 		ProjectFilter string
 		StatusFilter  string
@@ -117,6 +112,7 @@ func APIEditTaskForm(w http.ResponseWriter, r *http.Request) {
 		SidebarTitle:  "Edit Task",
 		Error:         "",
 		DueDate:       dueDate.String,
+		Completed:     completed,
 		Projects:      projectsList,
 		ProjectFilter: projectFilterParam,
 		StatusFilter:  statusFilter,
@@ -191,20 +187,15 @@ func APIEditTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Verify task exists and ownership + not completed
+	// Verify task exists and ownership
 	var ownerID int
-	var completed bool
-	err = db.QueryRow(context.Background(), "SELECT completed, user_id FROM tasks WHERE id = $1", id).Scan(&completed, &ownerID)
+	err = db.QueryRow(context.Background(), "SELECT user_id FROM tasks WHERE id = $1", id).Scan(&ownerID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			http.Error(w, "Task not found.", http.StatusNotFound)
 			return
 		}
 		http.Error(w, "Error fetching task.", http.StatusInternalServerError)
-		return
-	}
-	if completed {
-		http.Error(w, "Cannot edit a completed task.", http.StatusForbidden)
 		return
 	}
 
@@ -363,6 +354,7 @@ func APIEditTask(w http.ResponseWriter, r *http.Request) {
 		"Projects":         projectsList,
 		"ProjectFilter":    activeProject,
 		"StatusFilter":     statusFilter,
+		"Timezone":         timezone,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

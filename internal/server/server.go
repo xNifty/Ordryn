@@ -99,8 +99,10 @@ func StartServer() error {
 
 	// Projects API endpoints
 	http.HandleFunc("/api/projects/create", utils.RequireHTMX(utils.RequireAuth(handlers.APICreateProject)))
+	http.HandleFunc("/api/projects/update", utils.RequireHTMX(utils.RequireAuth(handlers.APIUpdateProject)))
 	http.HandleFunc("/api/projects/delete", utils.RequireHTMX(utils.RequireAuth(handlers.APIDeleteProject)))
 	http.HandleFunc("/api/projects/json", utils.RequireHTMX(utils.RequireAuth(handlers.APIProjectsJSON)))
+	http.HandleFunc("/api/validate-description", utils.RequireHTMX(handlers.ValidateDescription))
 
 	// Profile API endpoints
 	http.HandleFunc("/api/update-timezone", utils.RequireHTMX(handlers.APIUpdateTimezone))

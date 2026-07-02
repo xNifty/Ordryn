@@ -164,11 +164,13 @@ func APIUpdateTaskStatus(w http.ResponseWriter, r *http.Request) {
 		BasePath      string
 		ProjectFilter string
 		StatusFilter  string
+		Timezone      string
 	}{
 		Task:          task,
 		BasePath:      basePath,
 		ProjectFilter: projectParam,
 		StatusFilter:  statusFilter,
+		Timezone:      timezone,
 	}
 
 	if err := utils.Templates.ExecuteTemplate(w, "todo.html", data); err != nil {

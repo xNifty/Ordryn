@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-const MaxDescriptionLength = 100
+const MaxDescriptionLength = 1000
 
 func APIAddTask(w http.ResponseWriter, r *http.Request) {
 	// fmt.Println("Request method: ", r.Method)
@@ -352,6 +352,7 @@ func APIAddTask(w http.ResponseWriter, r *http.Request) {
 		"Projects":         projectsList,
 		"ProjectFilter":    activeProject,
 		"StatusFilter":     activeStatus,
+		"Timezone":         timezone,
 	}
 
 	// Set headers for successful addition
@@ -431,6 +432,7 @@ func APIAddTask(w http.ResponseWriter, r *http.Request) {
 		"Projects":         projectsList,
 		"ProjectFilter":    targetFilterParam,
 		"StatusFilter":     activeStatus,
+		"Timezone":         timezone,
 	}
 
 	// Instruct client to set toolbar filter to target project and render that project's view

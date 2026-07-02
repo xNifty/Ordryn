@@ -246,18 +246,18 @@ func SearchTasksForUserWithFilters(page, pageSize int, searchQuery string, userI
 	}
 
 	rows, err := pool.Query(context.Background(),
-		`SELECT id,
-		    title, 
-		    description,
-		    completed, 
-		    TO_CHAR((time_stamp AT TIME ZONE 'UTC') AT TIME ZONE $2, 'YYYY/MM/DD HH:MM AM') as date_added,
-		    COALESCE(CAST(due_date AS TEXT), '') AS due_date,
-		    TO_CHAR((time_stamp AT TIME ZONE 'UTC') AT TIME ZONE $2, 'YYYY/MM/DD HH:MM AM') AS date_created,
-		    COALESCE(TO_CHAR((date_modified AT TIME ZONE 'UTC') AT TIME ZONE $2, 'YYYY/MM/DD HH:MM AM'), '') AS date_modified,
-		    COALESCE(position,0)
-		 FROM tasks 
-		 WHERE (title ILIKE $1 OR description ILIKE $1) AND user_id = $4`+projectCond+statusCond+`
-		 ORDER BY position 
+		`SELECT t.id,
+		    t.title, 
+		    t.description,
+		    t.completed, 
+		    TO_CHAR((t.time_stamp AT TIME ZONE 'UTC') AT TIME ZONE $2, 'YYYY/MM/DD HH:MM AM') as date_added,
+		    COALESCE(CAST(t.due_date AS TEXT), '') AS due_date,
+		    TO_CHAR((t.time_stamp AT TIME ZONE 'UTC') AT TIME ZONE $2, 'YYYY/MM/DD HH:MM AM') AS date_created,
+		    COALESCE(TO_CHAR((t.date_modified AT TIME ZONE 'UTC') AT TIME ZONE $2, 'YYYY/MM/DD HH:MM AM'), '') AS date_modified,
+		    COALESCE(t.position,0), t.project_id, COALESCE(p.name,'')
+		 FROM tasks t LEFT JOIN projects p ON t.project_id = p.id
+		 WHERE (t.title ILIKE $1 OR t.description ILIKE $1) AND t.user_id = $4`+projectCond+statusCond+`
+		 ORDER BY t.position 
 		 LIMIT $3 OFFSET $5`,
 		searchPattern, timezone, pageSize, *userID, offset)
 
@@ -269,7 +269,7 @@ func SearchTasksForUserWithFilters(page, pageSize int, searchQuery string, userI
 
 	for rows.Next() {
 		var task Task
-		if err := rows.Scan(&task.ID, &task.Title, &task.Description, &task.Completed, &task.DateAdded, &task.DueDate, &task.DateCreated, &task.DateModified, &task.Position); err != nil {
+		if err := rows.Scan(&task.ID, &task.Title, &task.Description, &task.Completed, &task.DateAdded, &task.DueDate, &task.DateCreated, &task.DateModified, &task.Position, &task.ProjectID, &task.ProjectName); err != nil {
 			return nil, 0, err
 		}
 		tasks = append(tasks, task)
