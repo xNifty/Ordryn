@@ -24,22 +24,28 @@ function getTaskListPage() {
   return 1;
 }
 
-function buildTaskListUrl(page) {
+function buildTaskListUrl(page, options = {}) {
   let url = apiPath(`/api/fetch-tasks?page=${page}`);
   const searchInput = document.getElementById("search");
   if (searchInput && searchInput.value) {
     url += `&search=${encodeURIComponent(searchInput.value)}`;
   }
-  const appendHidden = (id, param) => {
+  const appendHidden = (id, param, override) => {
+    if (override !== undefined) {
+      if (override !== "") {
+        url += `&${param}=${encodeURIComponent(override)}`;
+      }
+      return;
+    }
     const el = document.getElementById(id);
     if (el && el.value) {
       url += `&${param}=${encodeURIComponent(el.value)}`;
     }
   };
-  appendHidden("status-filter", "status");
-  appendHidden("due-filter", "due");
-  appendHidden("sort-filter", "sort");
-  appendHidden("priority-filter", "priority");
+  appendHidden("status-filter", "status", options.status);
+  appendHidden("due-filter", "due", options.due);
+  appendHidden("sort-filter", "sort", options.sort);
+  appendHidden("priority-filter", "priority", options.priority);
   const projectFilter = document.getElementById("project-filter-value");
   if (projectFilter && projectFilter.value) {
     url += `&project=${encodeURIComponent(projectFilter.value)}`;
@@ -50,6 +56,37 @@ function buildTaskListUrl(page) {
     }
   }
   return url;
+}
+
+export function syncSortButtonState() {
+  const btn = document.getElementById("sort-priority-btn");
+  const sortEl = document.getElementById("sort-filter");
+  if (!btn || !sortEl) return;
+
+  const isPriority = sortEl.value === "priority";
+  btn.textContent = isPriority ? "Sort: Priority" : "Sort: Manual";
+  btn.classList.toggle("btn-primary", isPriority);
+  btn.classList.toggle("btn-outline-primary", !isPriority);
+  btn.setAttribute("aria-pressed", isPriority ? "true" : "false");
+  btn.title = isPriority
+    ? "Sorted by priority (high first). Click to restore manual drag order."
+    : "Sorted by manual order. Click to sort by priority (high first).";
+}
+
+export function attachSortToggleListener() {
+  document.body.addEventListener("click", function (evt) {
+    const btn = evt.target.closest("#sort-priority-btn");
+    if (!btn) return;
+
+    const sortEl = document.getElementById("sort-filter");
+    const current = sortEl ? sortEl.value : "";
+    const nextSort = current === "priority" ? "" : "priority";
+
+    htmx.ajax("GET", buildTaskListUrl(1, { sort: nextSort }), {
+      target: "#task-container",
+      swap: "innerHTML",
+    });
+  });
 }
 
 export function attachTaskDeletedListener() {
@@ -277,6 +314,9 @@ export function attachHTMXAfterSwapListeners() {
   document.body.addEventListener("htmx:afterSwap", function (evt) {
     if (evt.target && evt.target.id === "task-container") {
       try {
+        syncSortButtonState();
+      } catch (e) {}
+      try {
         initializeModalEventListeners();
       } catch (e) {}
     }
@@ -289,9 +329,11 @@ export function attachAllEventListeners() {
   attachReloadPreviousPageListener();
   attachLoginSuccessListener();
   attachTaskCountsChangedListener();
+  attachSortToggleListener();
   attachHTMXAfterRequestListener();
   attachHTMXAfterSettleListener();
   attachHTMXAfterSwapListeners();
   attachEditButtonListeners();
   attachContextualCloseSidebar();
+  syncSortButtonState();
 }
