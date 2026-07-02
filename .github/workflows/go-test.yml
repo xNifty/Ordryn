@@ -19,6 +19,4 @@ jobs:
           go-version: "1.24"
 
       - name: Run tests
-        env:
-          SESSION_KEY: test-session-key-for-unit-tests-32chars!!
         run: go test ./...

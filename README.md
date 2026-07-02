@@ -94,8 +94,10 @@ The app uses `github.com/jackc/pgx/v5/pgxpool`. Migrations run automatically on 
 Run tests:
 
 ```bash
-SESSION_KEY=test-session-key-for-unit-tests-32chars!! go test ./...
+go test ./...
 ```
+
+No `.env` file is required for tests; a test session key is used automatically under `go test`.
 
 ## License
 

@@ -88,7 +88,7 @@ func GetDashboardStats(userID int, timezone string) (*DashboardStats, error) {
 			SELECT DISTINCT te.task_id
 			FROM task_events te
 			WHERE te.user_id = $1 AND te.event_type = 'completed'
-			  AND (te.created_at AT TIME ZONE $2)::date >= date_trunc('week', (NOW() AT TIME ZONE $2))::date
+			  AND (((te.created_at AT TIME ZONE 'UTC') AT TIME ZONE $2))::date >= date_trunc('week', (NOW() AT TIME ZONE $2))::date
 			UNION
 			SELECT DISTINCT t.id
 			FROM tasks t
@@ -109,7 +109,7 @@ func GetDashboardStats(userID int, timezone string) (*DashboardStats, error) {
 			SELECT DISTINCT te.task_id
 			FROM task_events te
 			WHERE te.user_id = $1 AND te.event_type = 'completed'
-			  AND (te.created_at AT TIME ZONE $2)::date >= date_trunc('month', (NOW() AT TIME ZONE $2))::date
+			  AND (((te.created_at AT TIME ZONE 'UTC') AT TIME ZONE $2))::date >= date_trunc('month', (NOW() AT TIME ZONE $2))::date
 			UNION
 			SELECT DISTINCT t.id
 			FROM tasks t
@@ -173,10 +173,10 @@ func GetDashboardStats(userID int, timezone string) (*DashboardStats, error) {
 		) AS d
 		LEFT JOIN (
 			SELECT day, COUNT(*) AS cnt FROM (
-				SELECT DISTINCT te.task_id, (te.created_at AT TIME ZONE $2)::date AS day
+				SELECT DISTINCT te.task_id, (((te.created_at AT TIME ZONE 'UTC') AT TIME ZONE $2))::date AS day
 				FROM task_events te
 				WHERE te.user_id = $1 AND te.event_type = 'completed'
-				  AND (te.created_at AT TIME ZONE $2)::date >= ((NOW() AT TIME ZONE $2)::date - INTERVAL '6 days')::date
+				  AND (((te.created_at AT TIME ZONE 'UTC') AT TIME ZONE $2))::date >= ((NOW() AT TIME ZONE $2)::date - INTERVAL '6 days')::date
 				UNION
 				SELECT DISTINCT t.id AS task_id, ((COALESCE(t.date_modified, t.time_stamp) AT TIME ZONE 'UTC') AT TIME ZONE $2)::date AS day
 				FROM tasks t
@@ -212,10 +212,10 @@ func GetDashboardStats(userID int, timezone string) (*DashboardStats, error) {
 func completionStreak(ctx context.Context, pool *pgxpool.Pool, userID int, timezone string) int {
 	rows, err := pool.Query(ctx, `
 		SELECT DISTINCT day FROM (
-			SELECT (te.created_at AT TIME ZONE $2)::date AS day
+			SELECT (((te.created_at AT TIME ZONE 'UTC') AT TIME ZONE $2))::date AS day
 			FROM task_events te
 			WHERE te.user_id = $1 AND te.event_type = 'completed'
-			  AND (te.created_at AT TIME ZONE $2)::date >= ((NOW() AT TIME ZONE $2)::date - INTERVAL '90 days')::date
+			  AND (((te.created_at AT TIME ZONE 'UTC') AT TIME ZONE $2))::date >= ((NOW() AT TIME ZONE $2)::date - INTERVAL '90 days')::date
 			UNION
 			SELECT ((COALESCE(t.date_modified, t.time_stamp) AT TIME ZONE 'UTC') AT TIME ZONE $2)::date AS day
 			FROM tasks t

@@ -52,7 +52,7 @@ func TestGetDashboardStatsCompletionNotDoubleCounted(t *testing.T) {
 	})
 
 	_, err = pool.Exec(ctx,
-		`INSERT INTO task_events (task_id, user_id, event_type) VALUES ($1, 1, 'completed')`,
+		`INSERT INTO task_events (task_id, user_id, event_type, created_at) VALUES ($1, 1, 'completed', NOW() AT TIME ZONE 'UTC')`,
 		taskID,
 	)
 	if err != nil {
@@ -73,7 +73,7 @@ func TestGetDashboardStatsCompletionNotDoubleCounted(t *testing.T) {
 	}
 
 	_, err = pool.Exec(ctx,
-		`INSERT INTO task_events (task_id, user_id, event_type) VALUES ($1, 1, 'completed')`,
+		`INSERT INTO task_events (task_id, user_id, event_type, created_at) VALUES ($1, 1, 'completed', NOW() AT TIME ZONE 'UTC')`,
 		taskID,
 	)
 	if err != nil {
