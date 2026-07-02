@@ -334,8 +334,11 @@ func APIEditTask(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	// Re-render pagination like add_task does
-	// Determine page size
+	// Re-render the task row in place when it still matches the active filters.
+	fc := filterContextFromRequest(r)
+	activeProject := fc.Project
+	listFilters := fc.ToListFilters()
+
 	pageSize := utils.AppConstants.PageSize
 	if sess, err := sessionstore.Store.Get(r, "session"); err == nil && sess != nil {
 		if val, ok := sess.Values["items_per_page"]; ok {
@@ -360,95 +363,33 @@ func APIEditTask(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Determine active filters (from form or query)
-	fc := filterContextFromRequest(r)
-	activeProject := fc.Project
-	projectFilter := parseProjectFilter(activeProject)
-	listFilters := fc.ToListFilters()
-
-	var taskList []tasks.Task
-	var totalTasks int
-	taskList, totalTasks, err = tasks.ReturnPaginationForUserWithFilters(page, pageSize, &userID, timezone, listFilters)
+	task, err := tasks.FetchTaskByIDForUser(taskID, userID, timezone, page)
 	if err != nil {
-		http.Error(w, "Error fetching tasks after edit: "+err.Error(), http.StatusInternalServerError)
+		http.Error(w, "Error fetching updated task.", http.StatusInternalServerError)
 		return
 	}
 
-	prevDisabled := ""
-	if page == 1 {
-		prevDisabled = "disabled"
-	}
-	nextDisabled := ""
-	if page*pageSize >= totalTasks {
-		nextDisabled = "disabled"
-	}
-	prevPage := page - 1
-	if prevPage < 1 {
-		prevPage = 1
-	}
-	nextPage := page + 1
-
-	favs := make([]tasks.Task, 0)
-	nonFavs := make([]tasks.Task, 0)
-	for i := range taskList {
-		taskList[i].Page = page
-		if taskList[i].IsFavorite {
-			favs = append(favs, taskList[i])
-		} else {
-			nonFavs = append(nonFavs, taskList[i])
-		}
+	matches, err := tasks.TaskMatchesFilters(taskID, userID, timezone, listFilters, fc.Search)
+	if err != nil {
+		http.Error(w, "Error checking task filters.", http.StatusInternalServerError)
+		return
 	}
 
-	// Compute completed/incomplete counts respecting project filter
-	completedCount, incompleteCount := completedIncompleteCounts(&userID, projectFilter)
-
-	// Fetch projects and mark selected
-	projectsList := make([]map[string]interface{}, 0)
-	tagsList := make([]map[string]interface{}, 0)
-	if projs, perr := storage.GetProjectsForUser(userID); perr == nil {
-		for _, p := range projs {
-			sel := false
-			if projectFilter != nil && *projectFilter == p.ID {
-				sel = true
-			}
-			projectsList = append(projectsList, map[string]interface{}{"ID": p.ID, "Name": p.Name, "Selected": sel})
-		}
-	}
-	tagsList = tagsListForFilter(userID, fc.Tag)
-
-	context := map[string]interface{}{
-		"FavoriteTasks":    favs,
-		"Tasks":            nonFavs,
-		"PreviousPage":     prevPage,
-		"NextPage":         nextPage,
-		"CurrentPage":      page,
-		"PrevDisabled":     prevDisabled,
-		"NextDisabled":     nextDisabled,
-		"TotalTasks":       totalTasks,
-		"LoggedIn":         true,
-		"TotalPages":       (totalTasks + pageSize - 1) / pageSize,
-		"Pages":            utils.GetPaginationData(page, pageSize, totalTasks, userID).Pages,
-		"HasRightEllipsis": utils.GetPaginationData(page, pageSize, totalTasks, userID).HasRightEllipsis,
-		"CompletedTasks":   completedCount,
-		"IncompleteTasks":  incompleteCount,
-		"PerPage":          pageSize,
-		"Projects":         projectsList,
-		"Tags":             tagsList,
-		"Timezone":         timezone,
-	}
-	for k, v := range fc.TemplateFields() {
-		context[k] = v
-	}
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	// When editing, maintain the current project filter (don't follow the task to its new project)
 	if activeProject != "" {
 		w.Header().Set("HX-Trigger", "task-edited set-project-filter:"+activeProject)
 	} else {
 		w.Header().Set("HX-Trigger", "task-edited")
 	}
-	if err := utils.RenderTemplate(w, r, "pagination.html", context); err != nil {
-		http.Error(w, "Error rendering tasks after edit: "+err.Error(), http.StatusInternalServerError)
+
+	if matches {
+		if err := renderSingleTaskRow(w, task, fc, timezone); err != nil {
+			http.Error(w, "Error rendering task row after edit: "+err.Error(), http.StatusInternalServerError)
+		}
 		return
+	}
+
+	userPtr := &userID
+	if err := renderFilteredTaskListPartial(w, r, page, pageSize, fc, userPtr, timezone, true); err != nil {
+		http.Error(w, "Error rendering tasks after edit: "+err.Error(), http.StatusInternalServerError)
 	}
 }
