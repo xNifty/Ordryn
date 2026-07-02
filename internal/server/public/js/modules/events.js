@@ -42,10 +42,23 @@ function buildTaskListUrl(page, options = {}) {
       url += `&${param}=${encodeURIComponent(el.value)}`;
     }
   };
-  appendHidden("status-filter", "status", options.status);
   appendHidden("due-filter", "due", options.due);
   appendHidden("sort-filter", "sort", options.sort);
-  appendHidden("priority-filter", "priority", options.priority);
+  const readFilter = (toolbarId, hiddenId, param, override) => {
+    if (override !== undefined) {
+      if (override !== "") url += `&${param}=${encodeURIComponent(override)}`;
+      return;
+    }
+    const toolbar = document.getElementById(toolbarId);
+    if (toolbar && toolbar.value) {
+      url += `&${param}=${encodeURIComponent(toolbar.value)}`;
+      return;
+    }
+    appendHidden(hiddenId, param);
+  };
+  readFilter("status-filter-select", "status-filter", "status", options.status);
+  readFilter("tag-filter-toolbar", "tag-filter", "tag", options.tag);
+  readFilter("priority-filter-toolbar", "priority-filter", "priority", options.priority);
   const projectFilter = document.getElementById("project-filter-value");
   if (projectFilter && projectFilter.value) {
     url += `&project=${encodeURIComponent(projectFilter.value)}`;
@@ -56,6 +69,19 @@ function buildTaskListUrl(page, options = {}) {
     }
   }
   return url;
+}
+
+export function syncFilterToolbarState() {
+  const sync = (hiddenId, toolbarId) => {
+    const hidden = document.getElementById(hiddenId);
+    const toolbar = document.getElementById(toolbarId);
+    if (hidden && toolbar && toolbar.value !== hidden.value) {
+      toolbar.value = hidden.value;
+    }
+  };
+  sync("status-filter", "status-filter-select");
+  sync("tag-filter", "tag-filter-toolbar");
+  sync("priority-filter", "priority-filter-toolbar");
 }
 
 export function syncSortButtonState() {
@@ -315,6 +341,7 @@ export function attachHTMXAfterSwapListeners() {
     if (evt.target && evt.target.id === "task-container") {
       try {
         syncSortButtonState();
+        syncFilterToolbarState();
       } catch (e) {}
       try {
         initializeModalEventListeners();
@@ -336,4 +363,5 @@ export function attachAllEventListeners() {
   attachEditButtonListeners();
   attachContextualCloseSidebar();
   syncSortButtonState();
+  syncFilterToolbarState();
 }

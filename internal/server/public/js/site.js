@@ -41,7 +41,7 @@ import {
   initGlobalAnnouncement,
   dismissGlobalAnnouncement,
 } from "./modules/announcement.js";
-import { initAnnouncementCharCounter } from "./modules/admin.js";
+import { initDescriptionToggles } from "./modules/descriptions.js";
 
 // Expose these to global scope for HTMX and other inline scripts
 window.apiPath = apiPath;
@@ -67,6 +67,7 @@ document.addEventListener("DOMContentLoaded", () => {
   attachAllEventListeners();
   initGlobalAnnouncement();
   initAnnouncementCharCounter();
+  initDescriptionToggles();
 
   // Debug helper: when ?cssdebug=1 is present in the URL, log which media queries match.
   (function cssDebugHelper() {

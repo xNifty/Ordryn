@@ -88,6 +88,12 @@ func APIEditTaskForm(w http.ResponseWriter, r *http.Request) {
 	// Get the current filters from query string to pass to form
 	fc := filterContextFromRequest(r)
 
+	taskTags, _ := storage.GetTagsForTask(0)
+	if idInt, err := strconv.Atoi(id); err == nil {
+		taskTags, _ = storage.GetTagsForTask(idInt)
+	}
+	tagOptions := buildTagFormOptions(userID, selectedTagIDMap(taskTags))
+
 	data := struct {
 		FormTitle      string
 		Description    string
@@ -101,11 +107,13 @@ func APIEditTaskForm(w http.ResponseWriter, r *http.Request) {
 		Priority       int
 		Completed      bool
 		Projects       []map[string]interface{}
+		Tags           []map[string]interface{}
 		ProjectFilter  string
 		StatusFilter   string
 		DueFilter      string
 		SortFilter     string
 		PriorityFilter string
+		TagFilter      string
 	}{
 		FormTitle:      strings.TrimSpace(title),
 		Description:    strings.TrimSpace(description),
@@ -119,11 +127,13 @@ func APIEditTaskForm(w http.ResponseWriter, r *http.Request) {
 		Priority:       priority,
 		Completed:      completed,
 		Projects:       projectsList,
+		Tags:           tagOptions,
 		ProjectFilter:  fc.Project,
 		StatusFilter:   fc.Status,
 		DueFilter:      fc.Due,
 		SortFilter:     fc.Sort,
 		PriorityFilter: fc.Priority,
+		TagFilter:      fc.Tag,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -265,6 +275,22 @@ func APIEditTask(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	taskID, err := strconv.Atoi(id)
+	if err != nil {
+		http.Error(w, "Invalid task id", http.StatusBadRequest)
+		return
+	}
+
+	if err := assignTaskTagsFromRequest(r, taskID, userID); err != nil {
+		w.Header().Set("X-Validation-Error", "true")
+		w.Header().Set("HX-Trigger", "description-error")
+		w.Header().Set("HX-Retarget", "#description-error")
+		w.Header().Set("HX-Reswap", "innerHTML")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, err.Error())
+		return
+	}
+
 	// Re-render pagination like add_task does
 	// Determine page size
 	pageSize := utils.AppConstants.PageSize
@@ -335,6 +361,7 @@ func APIEditTask(w http.ResponseWriter, r *http.Request) {
 
 	// Fetch projects and mark selected
 	projectsList := make([]map[string]interface{}, 0)
+	tagsList := make([]map[string]interface{}, 0)
 	if projs, perr := storage.GetProjectsForUser(userID); perr == nil {
 		for _, p := range projs {
 			sel := false
@@ -344,6 +371,7 @@ func APIEditTask(w http.ResponseWriter, r *http.Request) {
 			projectsList = append(projectsList, map[string]interface{}{"ID": p.ID, "Name": p.Name, "Selected": sel})
 		}
 	}
+	tagsList = tagsListForFilter(userID, fc.Tag)
 
 	context := map[string]interface{}{
 		"FavoriteTasks":    favs,
@@ -362,6 +390,7 @@ func APIEditTask(w http.ResponseWriter, r *http.Request) {
 		"IncompleteTasks":  incompleteCount,
 		"PerPage":          pageSize,
 		"Projects":         projectsList,
+		"Tags":             tagsList,
 		"Timezone":         timezone,
 	}
 	for k, v := range fc.TemplateFields() {
