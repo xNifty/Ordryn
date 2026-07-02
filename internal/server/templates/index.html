@@ -211,12 +211,6 @@
                         title="{{if eq .SortFilter "priority"}}Sorted by priority (high first). Click to restore manual drag order.{{else}}Sorted by manual order. Click to sort by priority (high first).{{end}}">
                         {{if eq .SortFilter "priority"}}Sort: Priority{{else}}Sort: Manual{{end}}
                     </button>
-                    <a href="{{basePath}}/api/export?format=csv{{.FilterQuery}}" class="btn btn-outline-secondary btn-sm" download title="Export filtered tasks as CSV">
-                        <i class="bi bi-download"></i> Export CSV
-                    </a>
-                    <a href="{{basePath}}/api/export?format=json{{.FilterQuery}}" class="btn btn-outline-secondary btn-sm" download title="Export filtered tasks as JSON">
-                        <i class="bi bi-download"></i> Export JSON
-                    </a>
                 </div>
             </div>
             {{end}}

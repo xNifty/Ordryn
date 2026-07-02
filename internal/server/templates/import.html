@@ -41,10 +41,6 @@
                         New projects and tags are created automatically when needed.
                     </p>
 
-                    <div class="mb-3 mt-3">
-                        {{template "data_tools.html" .}}
-                    </div>
-
                     <form
                         hx-post="{{basePath}}/api/import"
                         hx-encoding="multipart/form-data"
