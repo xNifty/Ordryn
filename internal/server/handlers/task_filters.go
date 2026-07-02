@@ -253,6 +253,42 @@ func completedIncompleteCounts(userID *int, projectFilter *int) (int, int) {
 	return completedCount, incompleteCount
 }
 
+func renderSingleTaskRow(w http.ResponseWriter, task tasks.Task, fc FilterContext, timezone string) error {
+	if fc.Search != "" {
+		task.Title = highlightMatches(task.Title, fc.Search)
+		task.Description = highlightMatches(task.Description, fc.Search)
+	}
+
+	data := struct {
+		Task           tasks.Task
+		BasePath       string
+		ProjectFilter  string
+		StatusFilter   string
+		DueFilter      string
+		SortFilter     string
+		PriorityFilter string
+		FilterQuery    string
+		Timezone       string
+		IsSearching    bool
+	}{
+		Task:           task,
+		BasePath:       utils.GetBasePath(),
+		ProjectFilter:  fc.Project,
+		StatusFilter:   fc.Status,
+		DueFilter:      fc.Due,
+		SortFilter:     fc.Sort,
+		PriorityFilter: fc.Priority,
+		FilterQuery:    fc.QuerySuffix(),
+		Timezone:       timezone,
+		IsSearching:    fc.Search != "",
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("HX-Retarget", fmt.Sprintf("#task-%d", task.ID))
+	w.Header().Set("HX-Reswap", "outerHTML")
+	return utils.Templates.ExecuteTemplate(w, "todo.html", data)
+}
+
 func renderFilteredTaskListPartial(w http.ResponseWriter, r *http.Request, page, pageSize int, fc FilterContext, userID *int, timezone string, loggedIn bool) error {
 	if page <= 0 {
 		if fc.Page > 0 {

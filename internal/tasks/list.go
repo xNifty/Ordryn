@@ -318,3 +318,68 @@ func ReturnPagination(page, pageSize int) ([]Task, int, error) {
 func statusCondition(statusFilter string) string {
 	return ListFilters{StatusFilter: statusFilter}.statusCondition("")
 }
+
+// FetchTaskByIDForUser loads a single task row for display in the task list.
+func FetchTaskByIDForUser(taskID, userID int, timezone string, page int) (Task, error) {
+	pool, err := storage.OpenDatabase()
+	if err != nil {
+		return Task{}, err
+	}
+	defer storage.CloseDatabase(pool)
+
+	var task Task
+	var projectID sql.NullInt64
+	var projectName sql.NullString
+	err = pool.QueryRow(context.Background(),
+		`SELECT t.id, t.title, t.description, t.completed,
+			TO_CHAR((t.time_stamp AT TIME ZONE 'UTC') AT TIME ZONE $3, 'YYYY/MM/DD HH:MI AM') AS date_added,
+			COALESCE(CAST(t.due_date AS TEXT), '') AS due_date,
+			TO_CHAR((t.time_stamp AT TIME ZONE 'UTC') AT TIME ZONE $3, 'YYYY/MM/DD HH:MI AM') AS date_created,
+			COALESCE(TO_CHAR((t.date_modified AT TIME ZONE 'UTC') AT TIME ZONE $3, 'YYYY/MM/DD HH:MI AM'), '') AS date_modified,
+			COALESCE(t.is_favorite,false), COALESCE(t.position,0), COALESCE(t.priority,0), t.project_id, COALESCE(p.name,'')
+		FROM tasks t LEFT JOIN projects p ON t.project_id = p.id
+		WHERE t.id = $1 AND t.user_id = $2`, taskID, userID, timezone).Scan(
+		&task.ID, &task.Title, &task.Description, &task.Completed,
+		&task.DateAdded, &task.DueDate, &task.DateCreated, &task.DateModified,
+		&task.IsFavorite, &task.Position, &task.Priority, &projectID, &projectName)
+	if err != nil {
+		return Task{}, err
+	}
+	if projectID.Valid {
+		task.ProjectID = int(projectID.Int64)
+	}
+	task.ProjectName = projectName.String
+	task.Page = page
+	if err := attachTagsToTasks([]Task{task}); err != nil {
+		return Task{}, err
+	}
+	return task, nil
+}
+
+// TaskMatchesFilters reports whether a task satisfies the active list filters.
+func TaskMatchesFilters(taskID, userID int, timezone string, filters ListFilters, search string) (bool, error) {
+	pool, err := storage.OpenDatabase()
+	if err != nil {
+		return false, err
+	}
+	defer storage.CloseDatabase(pool)
+
+	var countWhere string
+	var args []interface{}
+	if search != "" {
+		searchPattern := "%" + search + "%"
+		args = []interface{}{searchPattern, taskID, userID}
+		countWhere = "WHERE id = $2 AND user_id = $3 AND " + searchMatchClause("")
+	} else {
+		args = []interface{}{taskID, userID}
+		countWhere = "WHERE id = $1 AND user_id = $2"
+	}
+	countWhere, args = appendFilterSQL(countWhere, args, filters, timezone, "")
+
+	var count int
+	err = pool.QueryRow(context.Background(), "SELECT COUNT(*) FROM tasks "+countWhere, args...).Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}

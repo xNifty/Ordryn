@@ -165,36 +165,10 @@ func APIUpdateTaskStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	basePath := utils.GetBasePath()
-
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	// Render the complete task row with updated data
 	fc := filterContextFromRequest(r)
-	data := struct {
-		Task           tasks.Task
-		BasePath       string
-		ProjectFilter  string
-		StatusFilter   string
-		DueFilter      string
-		SortFilter     string
-		PriorityFilter string
-		FilterQuery    string
-		Timezone       string
-		IsSearching    bool
-	}{
-		Task:           task,
-		BasePath:       basePath,
-		ProjectFilter:  fc.Project,
-		StatusFilter:   fc.Status,
-		DueFilter:      fc.Due,
-		SortFilter:     fc.Sort,
-		PriorityFilter: fc.Priority,
-		FilterQuery:    fc.QuerySuffix(),
-		Timezone:       timezone,
-		IsSearching:    fc.Search != "",
-	}
-
-	if err := utils.Templates.ExecuteTemplate(w, "todo.html", data); err != nil {
+	if err := renderSingleTaskRow(w, task, fc, timezone); err != nil {
 		http.Error(w, "Error rendering task row: "+err.Error(), http.StatusInternalServerError)
 		return
 	}

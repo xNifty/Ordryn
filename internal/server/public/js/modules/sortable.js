@@ -24,10 +24,11 @@ export function initSortable() {
       }
       el._sortable = Sortable.create(el, {
         handle: ".drag-handle",
+        draggable: "tr.task-row",
         animation: 150,
         onEnd: function (evt) {
-          // Build order of ids
-          const ids = Array.from(evt.to.children)
+          // Build order of ids from task rows only (ignore section labels)
+          const ids = Array.from(evt.to.querySelectorAll("tr.task-row"))
             .map((row) => {
               const id = row.id || "";
               return id.replace("task-", "");
@@ -166,14 +167,25 @@ export function attachSortableInitializers() {
   // Initialize sortable on initial load and after HTMX swaps
   initSortable();
   document.body.addEventListener("htmx:afterSwap", function (evt) {
-    if (evt.target.id === "task-container") {
+    const target = (evt.detail && evt.detail.target) || evt.target;
+    if (!target) return;
+
+    const isTaskContainer = target.id === "task-container";
+    const isTaskRow =
+      target.tagName === "TR" &&
+      target.id &&
+      target.id.startsWith("task-");
+
+    if (!isTaskContainer && !isTaskRow) return;
+
+    if (isTaskContainer) {
       // Ensure table retains expected Bootstrap classes after HTMX replaces content
       try {
         ensureTableStructure();
         ensureTableClasses();
       } catch (e) {}
-
-      initSortable();
     }
+
+    initSortable();
   });
 }
