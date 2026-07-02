@@ -71,6 +71,18 @@ function buildTaskListUrl(page, options = {}) {
   return url;
 }
 
+export function syncDueFilterButtons() {
+  const dueEl = document.getElementById("due-filter");
+  if (!dueEl) return;
+  const activeDue = dueEl.value || "";
+  document.querySelectorAll(".due-filter-btn").forEach((btn) => {
+    const btnDue = btn.getAttribute("data-due") ?? "";
+    const isActive = btnDue === activeDue;
+    btn.classList.toggle("due-filter-active", isActive);
+    btn.setAttribute("aria-pressed", isActive ? "true" : "false");
+  });
+}
+
 export function syncFilterToolbarState() {
   const sync = (hiddenId, toolbarId) => {
     const hidden = document.getElementById(hiddenId);
@@ -82,6 +94,7 @@ export function syncFilterToolbarState() {
   sync("status-filter", "status-filter-select");
   sync("tag-filter", "tag-filter-toolbar");
   sync("priority-filter", "priority-filter-toolbar");
+  syncDueFilterButtons();
 }
 
 export function syncSortButtonState() {
@@ -351,6 +364,19 @@ export function attachHTMXAfterSwapListeners() {
 }
 
 export function attachAllEventListeners() {
+  document.body.addEventListener("click", (e) => {
+    const dueBtn = e.target.closest(".due-filter-btn");
+    if (dueBtn) {
+      const activeDue = dueBtn.getAttribute("data-due") ?? "";
+      document.querySelectorAll(".due-filter-btn").forEach((btn) => {
+        const btnDue = btn.getAttribute("data-due") ?? "";
+        const isActive = btnDue === activeDue;
+        btn.classList.toggle("due-filter-active", isActive);
+        btn.setAttribute("aria-pressed", isActive ? "true" : "false");
+      });
+    }
+  });
+
   attachTaskDeletedListener();
   attachReloadPageListener();
   attachReloadPreviousPageListener();

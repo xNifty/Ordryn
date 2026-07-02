@@ -181,19 +181,19 @@
                     </select>
                     {{end}}
                     <div class="btn-group btn-group-sm" role="group" aria-label="Due date filters">
-                        <button type="button" class="btn btn-outline-secondary due-filter-btn {{if eq .DueFilter ""}}due-filter-active{{end}}"
+                        <button type="button" class="btn btn-outline-secondary due-filter-btn {{if eq .DueFilter ""}}due-filter-active{{end}}" data-due="" aria-pressed="{{if eq .DueFilter ""}}true{{else}}false{{end}}"
                             hx-get="{{basePath}}/api/fetch-tasks?page=1" hx-vals='{"due": ""}' hx-include="#project-filter, #status-filter-select, #sort-filter, #priority-filter, #tag-filter-toolbar, #search"
                             hx-target="#task-container" hx-swap="innerHTML">All</button>
-                        <button type="button" class="btn btn-outline-secondary due-filter-btn {{if eq .DueFilter "today"}}due-filter-active{{end}}"
+                        <button type="button" class="btn btn-outline-secondary due-filter-btn {{if eq .DueFilter "today"}}due-filter-active{{end}}" data-due="today" aria-pressed="{{if eq .DueFilter "today"}}true{{else}}false{{end}}"
                             hx-get="{{basePath}}/api/fetch-tasks?page=1" hx-vals='{"due": "today"}' hx-include="#project-filter, #status-filter-select, #sort-filter, #priority-filter, #tag-filter-toolbar, #search"
                             hx-target="#task-container" hx-swap="innerHTML">Today</button>
-                        <button type="button" class="btn btn-outline-secondary due-filter-btn {{if eq .DueFilter "overdue"}}due-filter-active{{end}}"
+                        <button type="button" class="btn btn-outline-secondary due-filter-btn {{if eq .DueFilter "overdue"}}due-filter-active{{end}}" data-due="overdue" aria-pressed="{{if eq .DueFilter "overdue"}}true{{else}}false{{end}}"
                             hx-get="{{basePath}}/api/fetch-tasks?page=1" hx-vals='{"due": "overdue"}' hx-include="#project-filter, #status-filter-select, #sort-filter, #priority-filter, #tag-filter-toolbar, #search"
                             hx-target="#task-container" hx-swap="innerHTML">Overdue</button>
-                        <button type="button" class="btn btn-outline-secondary due-filter-btn {{if eq .DueFilter "week"}}due-filter-active{{end}}"
+                        <button type="button" class="btn btn-outline-secondary due-filter-btn {{if eq .DueFilter "week"}}due-filter-active{{end}}" data-due="week" aria-pressed="{{if eq .DueFilter "week"}}true{{else}}false{{end}}"
                             hx-get="{{basePath}}/api/fetch-tasks?page=1" hx-vals='{"due": "week"}' hx-include="#project-filter, #status-filter-select, #sort-filter, #priority-filter, #tag-filter-toolbar, #search"
                             hx-target="#task-container" hx-swap="innerHTML">This Week</button>
-                        <button type="button" class="btn btn-outline-secondary due-filter-btn {{if eq .DueFilter "none"}}due-filter-active{{end}}"
+                        <button type="button" class="btn btn-outline-secondary due-filter-btn {{if eq .DueFilter "none"}}due-filter-active{{end}}" data-due="none" aria-pressed="{{if eq .DueFilter "none"}}true{{else}}false{{end}}"
                             hx-get="{{basePath}}/api/fetch-tasks?page=1" hx-vals='{"due": "none"}' hx-include="#project-filter, #status-filter-select, #sort-filter, #priority-filter, #tag-filter-toolbar, #search"
                             hx-target="#task-container" hx-swap="innerHTML">No Date</button>
                     </div>
