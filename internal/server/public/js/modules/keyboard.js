@@ -155,14 +155,14 @@ export function initKeyboardShortcuts() {
       let focused = resolveFocusedRow();
       let idx = resolveRowIndex(rows);
 
-      if (e.code === "KeyJ") {
+      if (e.code === "KeyK") {
         e.preventDefault();
         idx = idx < rows.length - 1 ? idx + 1 : 0;
         setFocusedRow(rows[idx]);
         return;
       }
 
-      if (e.code === "KeyK") {
+      if (e.code === "KeyJ") {
         e.preventDefault();
         idx = idx > 0 ? idx - 1 : rows.length - 1;
         setFocusedRow(rows[idx]);
