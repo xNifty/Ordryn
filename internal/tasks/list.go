@@ -100,7 +100,7 @@ func ReturnPaginationForUserWithFilters(page, pageSize int, userID *int, timezon
 	countWhere := "WHERE user_id = $1" + nonFavoriteCond
 	countWhere, countArgs = appendFilterSQL(countWhere, countArgs, filters, timezone, "")
 	var totalTasks int
-	if err := pool.QueryRow(context.Background(), "SELECT COUNT(*) FROM tasks"+countWhere, countArgs...).Scan(&totalTasks); err != nil {
+	if err := pool.QueryRow(context.Background(), "SELECT COUNT(*) FROM tasks "+countWhere, countArgs...).Scan(&totalTasks); err != nil {
 		return nil, 0, err
 	}
 
@@ -156,7 +156,7 @@ func SearchTasksForUserWithFilters(page, pageSize int, searchQuery string, userI
 	countWhere := "WHERE (title ILIKE $1 OR description ILIKE $1) AND user_id = $2"
 	countWhere, countArgs = appendFilterSQL(countWhere, countArgs, filters, timezone, "")
 	var totalTasks int
-	if err := pool.QueryRow(context.Background(), "SELECT COUNT(*) FROM tasks"+countWhere, countArgs...).Scan(&totalTasks); err != nil {
+	if err := pool.QueryRow(context.Background(), "SELECT COUNT(*) FROM tasks "+countWhere, countArgs...).Scan(&totalTasks); err != nil {
 		return nil, 0, err
 	}
 

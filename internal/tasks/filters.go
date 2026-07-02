@@ -1,6 +1,9 @@
 package tasks
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // ListFilters holds query filters for task list and search endpoints.
 type ListFilters struct {
@@ -30,11 +33,22 @@ func (f ListFilters) statusCondition(tablePrefix string) string {
 	if tablePrefix != "" {
 		prefix = tablePrefix + "."
 	}
-	switch f.StatusFilter {
-	case "complete", "completed":
+	switch normalizeListStatusFilter(f.StatusFilter) {
+	case "complete":
 		return fmt.Sprintf(" AND %scompleted = true", prefix)
 	case "incomplete":
 		return fmt.Sprintf(" AND (%scompleted IS NULL OR %scompleted = false)", prefix, prefix)
+	default:
+		return ""
+	}
+}
+
+func normalizeListStatusFilter(status string) string {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "complete", "completed":
+		return "complete"
+	case "incomplete":
+		return "incomplete"
 	default:
 		return ""
 	}
