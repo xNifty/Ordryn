@@ -12,18 +12,70 @@ function getTaskRows() {
   return Array.from(container.querySelectorAll("tr.task-row"));
 }
 
+let lastFocusedTaskId = null;
+let pendingFocusTaskId = null;
+
+function taskIdFromRow(row) {
+  if (!row) return null;
+  if (row.id && row.id.startsWith("task-")) {
+    return row.id.slice("task-".length);
+  }
+  return row.getAttribute("data-task-id");
+}
+
+function rowForTaskId(taskId) {
+  if (!taskId) return null;
+  return document.getElementById(`task-${taskId}`);
+}
+
 function setFocusedRow(row) {
   document.querySelectorAll("tr.task-row-focused").forEach((r) => {
     r.classList.remove("task-row-focused");
   });
-  if (!row) return;
+  if (!row) {
+    lastFocusedTaskId = null;
+    return;
+  }
   row.classList.add("task-row-focused");
+  lastFocusedTaskId = taskIdFromRow(row);
   row.focus({ preventScroll: true });
   row.scrollIntoView({ block: "nearest" });
 }
 
 function getFocusedRow() {
   return document.querySelector("tr.task-row-focused");
+}
+
+function resolveFocusedRow() {
+  const focused = getFocusedRow();
+  if (focused) return focused;
+  return rowForTaskId(lastFocusedTaskId);
+}
+
+function resolveRowIndex(rows) {
+  const row = resolveFocusedRow();
+  if (!row) return -1;
+  return rows.indexOf(row);
+}
+
+function attachKeyboardFocusRestore() {
+  document.body.addEventListener("htmx:beforeSwap", (evt) => {
+    const target = evt.detail?.target;
+    if (!target?.id?.startsWith("task-")) return;
+    const focused = getFocusedRow();
+    if (focused && focused.id === target.id) {
+      pendingFocusTaskId = taskIdFromRow(target);
+    }
+  });
+
+  document.body.addEventListener("htmx:afterSwap", (evt) => {
+    const target = evt.detail?.target || evt.target;
+    if (!target?.id?.startsWith("task-")) return;
+    if (pendingFocusTaskId && taskIdFromRow(target) === pendingFocusTaskId) {
+      setFocusedRow(target);
+      pendingFocusTaskId = null;
+    }
+  });
 }
 
 function openShortcutsModal() {
@@ -51,6 +103,8 @@ function isSearchKey(e) {
 }
 
 export function initKeyboardShortcuts() {
+  attachKeyboardFocusRestore();
+
   window.addEventListener(
     "keydown",
     (e) => {
@@ -98,8 +152,8 @@ export function initKeyboardShortcuts() {
       const rows = getTaskRows();
       if (rows.length === 0) return;
 
-      let focused = getFocusedRow();
-      let idx = focused ? rows.indexOf(focused) : -1;
+      let focused = resolveFocusedRow();
+      let idx = resolveRowIndex(rows);
 
       if (e.code === "KeyJ") {
         e.preventDefault();
@@ -126,6 +180,9 @@ export function initKeyboardShortcuts() {
 
       if (e.code === "KeyX") {
         e.preventDefault();
+        if (!focused.classList.contains("task-row-focused")) {
+          setFocusedRow(focused);
+        }
         const statusBtn = focused.querySelector(".status-column");
         if (statusBtn) statusBtn.click();
       }
