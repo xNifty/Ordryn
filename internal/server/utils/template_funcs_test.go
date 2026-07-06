@@ -39,9 +39,10 @@ func TestDueDateDisplay(t *testing.T) {
 
 func TestDueDateInputValue(t *testing.T) {
 	tests := []struct {
-		in   string
+		in   interface{}
 		want string
 	}{
+		{nil, ""},
 		{"", ""},
 		{"2026-07-17", "2026-07-17"},
 		{"2026-07-17 00:00:00+00", "2026-07-17"},

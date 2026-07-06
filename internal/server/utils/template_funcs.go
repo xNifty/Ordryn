@@ -23,17 +23,24 @@ func parseDueDate(dueDate string, loc *time.Location) (time.Time, bool) {
 }
 
 // DueDateInputValue normalizes a stored due date for HTML date inputs (YYYY-MM-DD).
-func DueDateInputValue(dueDate string) string {
-	dueDate = strings.TrimSpace(dueDate)
-	if dueDate == "" {
+func DueDateInputValue(dueDate interface{}) string {
+	if dueDate == nil {
 		return ""
 	}
-	if len(dueDate) >= 10 {
-		if t, err := time.Parse("2006-01-02", dueDate[:10]); err == nil {
+	raw, ok := dueDate.(string)
+	if !ok {
+		return ""
+	}
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	if len(raw) >= 10 {
+		if t, err := time.Parse("2006-01-02", raw[:10]); err == nil {
 			return t.Format("2006-01-02")
 		}
 	}
-	return dueDate
+	return raw
 }
 
 // DueDateClass returns a CSS class for due-date styling based on user timezone.
