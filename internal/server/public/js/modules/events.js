@@ -15,6 +15,21 @@ import {
 import { showToast } from "./notifications.js";
 import { initSortable } from "./sortable.js";
 
+/** Registry of hooks run after manual task-list HTML swaps. */
+const postSwapHooks = [];
+
+export function registerPostSwapHook(fn) {
+  postSwapHooks.push(fn);
+}
+
+function runPostSwapHooks(container) {
+  for (const fn of postSwapHooks) {
+    try {
+      fn(container);
+    } catch (e) {}
+  }
+}
+
 /** Replace task list HTML from fetch responses and re-bind HTMX + UI hooks. */
 export function swapTaskContainerHtml(html) {
   const container = document.getElementById("task-container");
@@ -33,6 +48,7 @@ export function swapTaskContainerHtml(html) {
     syncFilterToolbarState();
     initializeModalEventListeners();
     attachEditButtonListeners();
+    runPostSwapHooks(container);
   } catch (e) {}
   document.body.dispatchEvent(new CustomEvent("bulk-list-updated"));
   return true;
@@ -68,6 +84,7 @@ function buildTaskListUrl(page, options = {}) {
     }
   };
   appendHidden("due-filter", "due", options.due);
+  appendHidden("completed-filter", "completed", options.completed);
   appendHidden("sort-filter", "sort", options.sort);
   const readFilter = (toolbarId, hiddenId, param, override) => {
     if (override !== undefined) {
@@ -391,7 +408,13 @@ export function attachHTMXAfterSwapListeners() {
 
 export function attachHTMXErrorListeners() {
   document.body.addEventListener("htmx:responseError", (evt) => {
-    const status = evt.detail?.xhr?.status;
+    const xhr = evt.detail?.xhr;
+    if (!xhr) return;
+    if (xhr.getResponseHeader?.("X-Validation-Error") === "true") return;
+    const url = xhr.responseURL || "";
+    if (url.includes("/api/validate-description")) return;
+
+    const status = xhr.status;
     const msg =
       status && status >= 500
         ? "Something went wrong on the server. Please try again."

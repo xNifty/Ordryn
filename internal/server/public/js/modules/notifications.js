@@ -6,35 +6,14 @@ export function showToast(message, opts) {
   const container = ensureToastContainer();
   const t = document.createElement("div");
   t.className = "app-toast" + (opts.error ? " app-toast--error" : "");
-  t.setAttribute("role", "status");
-  t.setAttribute("aria-live", "polite");
+  t.setAttribute("role", opts.error ? "alert" : "status");
+  t.setAttribute("aria-live", opts.error ? "assertive" : "polite");
 
   const text = document.createElement("span");
   text.className = "app-toast-text";
   text.textContent = message;
   t.appendChild(text);
 
-  if (opts.actionLabel && typeof opts.onAction === "function") {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "btn btn-sm btn-link app-toast-action";
-    btn.textContent = opts.actionLabel;
-    btn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      opts.onAction();
-      clearTimeout(to);
-      remove();
-    });
-    t.appendChild(btn);
-  }
-
-  container.appendChild(t);
-
-  requestAnimationFrame(() => {
-    t.classList.add("show");
-  });
-
-  const timeout = typeof opts.duration === "number" ? opts.duration : 3500;
   const remove = () => {
     t.classList.remove("show");
     setTimeout(() => {
@@ -44,14 +23,56 @@ export function showToast(message, opts) {
     }, 220);
   };
 
-  const to = setTimeout(remove, timeout);
+  let to = null;
+  const scheduleRemove = (ms) => {
+    if (to) clearTimeout(to);
+    to = setTimeout(remove, ms);
+  };
 
-  if (!opts.actionLabel) {
-    t.addEventListener("click", function () {
-      clearTimeout(to);
+  if (opts.actionLabel && typeof opts.onAction === "function") {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn btn-sm btn-link app-toast-action";
+    btn.textContent = opts.actionLabel;
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      opts.onAction();
+      scheduleRemove(0);
       remove();
     });
+    t.appendChild(btn);
   }
+
+  const closeBtn = document.createElement("button");
+  closeBtn.type = "button";
+  closeBtn.className = "btn-close app-toast-close";
+  closeBtn.setAttribute("aria-label", "Dismiss notification");
+  closeBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    scheduleRemove(0);
+    remove();
+  });
+  t.appendChild(closeBtn);
+
+  container.appendChild(t);
+
+  requestAnimationFrame(() => {
+    t.classList.add("show");
+  });
+
+  const timeout =
+    typeof opts.duration === "number"
+      ? opts.duration
+      : opts.error
+        ? 8000
+        : 3500;
+  scheduleRemove(timeout);
+
+  t.addEventListener("click", (e) => {
+    if (e.target.closest(".app-toast-action, .app-toast-close")) return;
+    scheduleRemove(0);
+    remove();
+  });
 }
 
 export function attachNotificationListeners() {

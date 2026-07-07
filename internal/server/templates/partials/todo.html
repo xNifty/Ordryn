@@ -19,10 +19,10 @@
                 {{end}}
             </button>
             
-            <span role="button" tabindex="0" class="task-toggle title-text p-0" aria-expanded="false"
+            <button type="button" class="btn btn-link p-0 task-toggle title-text text-start" aria-expanded="false"
                 title="Created: {{.Task.DateCreated}}{{if .Task.DateModified}} | Modified: {{.Task.DateModified}}{{end}}">
                 {{safeHTML .Task.Title}}
-            </span>
+            </button>
             {{if .Task.ProjectName}}
             <span class="badge bg-secondary project-badge ms-1">{{.Task.ProjectName}}</span>
             {{end}}

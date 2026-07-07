@@ -72,7 +72,7 @@ func APIBulkUpdate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
-	defer db.Close()
+	defer storage.CloseDatabase(db)
 
 	ctx := context.Background()
 	if err := verifyTasksOwnedByUser(ctx, db, ids, *userID); err != nil {

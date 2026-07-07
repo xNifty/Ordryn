@@ -27,7 +27,7 @@ func APIEditTaskForm(w http.ResponseWriter, r *http.Request) {
 		page = "1"
 	}
 
-	email, _, _, loggedIn := utils.GetSessionUser(r)
+	email, _, _, timezone, loggedIn, _ := utils.GetSessionUserWithTimezone(r)
 	if !loggedIn {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
@@ -38,7 +38,7 @@ func APIEditTaskForm(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to open database", http.StatusInternalServerError)
 		return
 	}
-	defer db.Close()
+	defer storage.CloseDatabase(db)
 
 	var title, description string
 	var completed bool
@@ -94,26 +94,39 @@ func APIEditTaskForm(w http.ResponseWriter, r *http.Request) {
 	}
 	tagOptions := buildTagFormOptions(userID, selectedTagIDMap(taskTags))
 
+	returnTo := ""
+	calendarMonth := ""
+	if r.URL.Query().Get("from") == "calendar" {
+		returnTo = "calendar"
+		calendarMonth = r.URL.Query().Get("month")
+		if len(calendarMonth) != 7 {
+			calendarMonth = currentYearMonth(timezone)
+		}
+	}
+
 	data := struct {
-		FormTitle      string
-		Description    string
-		CurrentPage    string
-		ID             string
-		FormAction     string
-		SubmitText     string
-		SidebarTitle   string
-		Error          string
-		DueDate        string
-		Priority       int
-		Completed      bool
-		Projects       []map[string]interface{}
-		Tags           []map[string]interface{}
-		ProjectFilter  string
-		StatusFilter   string
-		DueFilter      string
-		SortFilter     string
-		PriorityFilter string
-		TagFilter      string
+		FormTitle       string
+		Description     string
+		CurrentPage     string
+		ID              string
+		FormAction      string
+		SubmitText      string
+		SidebarTitle    string
+		Error           string
+		DueDate         string
+		Priority        int
+		Completed       bool
+		Projects        []map[string]interface{}
+		Tags            []map[string]interface{}
+		ProjectFilter   string
+		StatusFilter    string
+		DueFilter       string
+		SortFilter      string
+		PriorityFilter  string
+		TagFilter       string
+		CompletedFilter string
+		ReturnTo        string
+		CalendarMonth   string
 	}{
 		FormTitle:      strings.TrimSpace(title),
 		Description:    strings.TrimSpace(description),
@@ -133,7 +146,10 @@ func APIEditTaskForm(w http.ResponseWriter, r *http.Request) {
 		DueFilter:      fc.Due,
 		SortFilter:     fc.Sort,
 		PriorityFilter: fc.Priority,
-		TagFilter:      fc.Tag,
+		TagFilter:       fc.Tag,
+		CompletedFilter: fc.Completed,
+		ReturnTo:        returnTo,
+		CalendarMonth:   calendarMonth,
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -191,7 +207,7 @@ func APIEditTask(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	defer db.Close()
+	defer storage.CloseDatabase(db)
 
 	email, _, _, timezone, loggedIn, _ := utils.GetSessionUserWithTimezone(r)
 	if !loggedIn {
@@ -335,6 +351,11 @@ func APIEditTask(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Re-render the task row in place when it still matches the active filters.
+	if isCalendarReturn(r) {
+		respondCalendarRedirect(w, calendarMonthFromRequest(r, timezone), timezone)
+		return
+	}
+
 	fc := filterContextFromRequest(r)
 	activeProject := fc.Project
 	listFilters := fc.ToListFilters()

@@ -12,9 +12,12 @@
                     </li>
                     {{if .LoggedIn}}
                     <li class="nav-item">
-                        <a class="nav-link" href="{{basePath}}/dashboard">
+                        <a class="nav-link" href="{{basePath}}/dashboard" hx-boost="true" hx-target="main" hx-select="main" hx-swap="outerHTML show:top">
                             Dashboard{{if .OverdueCount}} <span class="badge bg-danger ms-1" title="Overdue tasks">{{.OverdueCount}}</span>{{end}}
                         </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{basePath}}/calendar" hx-boost="true" hx-target="main" hx-select="main" hx-swap="outerHTML show:top">Calendar</a>
                     </li>
                     {{end}}
                     <li class="nav-item">
@@ -22,7 +25,7 @@
                     </li>
                     {{if .LoggedIn}}
                     <li class="nav-item">
-                        <a class="nav-link" href="{{basePath}}/projects">Projects</a>
+                        <a class="nav-link" href="{{basePath}}/projects" hx-boost="true" hx-target="main" hx-select="main" hx-swap="outerHTML show:top">Projects</a>
                     </li>
                     {{end}}
                     {{if .ShowChangelog}}
@@ -54,7 +57,7 @@
                     <button type="button" class="btn btn-outline-secondary btn-sm me-2" id="shortcuts-help-btn" data-bs-toggle="modal" data-bs-target="#shortcutsModal" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">
                         <i class="bi bi-question-circle"></i>
                     </button>
-                    <a href="{{basePath}}/profile#calendar-feed" class="btn btn-outline-secondary btn-sm me-2" title="Profile &amp; calendar sync">
+                    <a href="{{basePath}}/profile" class="btn btn-outline-secondary btn-sm me-2" title="Profile settings" hx-boost="true" hx-target="main" hx-select="main" hx-swap="outerHTML show:top">
                         <i class="bi bi-person-circle"></i> Profile
                     </a>
                     <button class="btn btn-outline-danger btn-sm" id="logout-btn" hx-post="{{basePath}}/api/logout" hx-trigger="click">

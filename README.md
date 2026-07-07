@@ -2,7 +2,7 @@
 
 GoTodo is a self-hosted task manager built with Go, PostgreSQL, and HTMX. It focuses on simplicity and a pleasant experience: user accounts, per-user tasks, invite flow, role-based permissions, a responsive UI, and in-place HTMX interactions.
 
-**Current version:** v0.16.1-beta
+**Current version:** v0.17.0-beta
 
 ## Features
 
@@ -16,8 +16,9 @@ GoTodo is a self-hosted task manager built with Go, PostgreSQL, and HTMX. It foc
 - Search with project, status, tag, and due-date filters
 - Markdown task descriptions with truncated list view and expand-in-place
 - Bulk actions: complete, delete, move project, add/remove tag, set/clear due date, set priority
-- Undo delete (toast with a few seconds to restore)
-- ICS calendar feed for due tasks (subscribe from Profile)
+- Undo delete (toast with up to 120 seconds to restore, preserves task IDs when possible)
+- ICS calendar feed for due tasks; in-app calendar view; ICS import to sync due dates
+- Daily email digest (opt-in on Profile)
 - CSV import with preview/confirm; CSV/JSON export (auto-creates projects and tags on import)
 - Task activity timeline in the edit sidebar
 - Dashboard with overdue/today counts, completion charts, and streak tracking

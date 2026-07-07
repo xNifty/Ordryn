@@ -51,6 +51,9 @@ import { initUndoDelete } from "./modules/undo.js";
 import { initFilterToolbar } from "./modules/filters.js";
 import { initShortcutsHint } from "./modules/onboarding.js";
 import { initProfilePage } from "./modules/profile.js";
+import { initHomePage } from "./modules/home-init.js";
+import { initNavigation } from "./modules/navigation.js";
+import { initCalendarPage } from "./modules/calendar.js";
 
 function configureHtmxCSP() {
   if (typeof htmx === "undefined") return;
@@ -95,8 +98,15 @@ document.addEventListener("DOMContentLoaded", () => {
   initKeyboardShortcuts();
   initFilterToolbar();
   initShortcutsHint();
+  initNavigation();
+  if (document.body.dataset.projectFilter !== undefined) {
+    initHomePage();
+  }
   if (document.body.classList.contains("profile-page")) {
     initProfilePage();
+  }
+  if (document.body.classList.contains("calendar-page")) {
+    initCalendarPage();
   }
   initRevealTokenButtons();
 

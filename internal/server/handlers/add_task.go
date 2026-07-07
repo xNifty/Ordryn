@@ -68,7 +68,7 @@ func APIAddTask(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	defer db.Close()
+	defer storage.CloseDatabase(db)
 
 	// Get user ID from session (fallback to querying by email if not present)
 	email, _, _, timezone, loggedIn, _ := utils.GetSessionUserWithTimezone(r)
@@ -156,6 +156,11 @@ func APIAddTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	logTaskEvent(newTaskID, userID, "created", nil)
+
+	if isCalendarReturn(r) {
+		respondCalendarRedirect(w, calendarMonthFromRequest(r, timezone), timezone)
+		return
+	}
 
 	pageSize := utils.AppConstants.PageSize
 	if sess, err := sessionstore.Store.Get(r, "session"); err == nil && sess != nil {

@@ -1,6 +1,11 @@
 import { apiPath } from "./utils.js";
 import { showToast } from "./notifications.js";
 
+function csrfToken() {
+  const el = document.getElementById("csrf_token");
+  return el ? el.value : "";
+}
+
 function setButtonLoading(btn, loading, defaultHtml) {
   if (!btn) return;
   btn.disabled = loading;
@@ -77,12 +82,18 @@ export function initProfilePage() {
       const formData = new FormData();
       formData.append("timezone", document.getElementById("timezone").value);
       formData.append("user_name", document.getElementById("user_name").value);
+      const digestEl = document.getElementById("digest_enabled");
+      if (digestEl?.checked) formData.append("digest_enabled", "true");
+      const digestHour = document.getElementById("digest_hour");
+      if (digestHour) formData.append("digest_hour", digestHour.value);
+      const csrf = csrfToken();
+      if (csrf) formData.append("csrf_token", csrf);
       const per = document.getElementById("items_per_page");
       if (per) formData.append("items_per_page", per.value);
       try {
         const response = await fetch(apiPath("/api/update-profile"), {
           method: "POST",
-          headers: { "HX-Request": "true" },
+          headers: { "HX-Request": "true", "X-CSRF-Token": csrf },
           body: formData,
         });
         if (response.ok) {
@@ -141,10 +152,12 @@ export function initProfilePage() {
       );
       formData.append("new_password", newPassword);
       formData.append("confirm_password", confirmPassword);
+      const csrf = csrfToken();
+      if (csrf) formData.append("csrf_token", csrf);
       try {
         const response = await fetch(apiPath("/api/change-password"), {
           method: "POST",
-          headers: { "HX-Request": "true" },
+          headers: { "HX-Request": "true", "X-CSRF-Token": csrf },
           body: formData,
         });
         if (response.ok) {
@@ -169,8 +182,9 @@ export function initProfilePage() {
             showToast(responseText, { error: true });
           }
         } else {
+          const errText = await response.text();
           document.getElementById("passwordErrorText").textContent =
-            "Error changing password. Please try again.";
+            errText || "Error changing password. Please try again.";
           document.getElementById("passwordErrorMessage").style.display =
             "block";
           showToast("Error changing password. Please try again.", {

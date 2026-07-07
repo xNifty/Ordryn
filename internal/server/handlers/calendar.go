@@ -1,10 +1,12 @@
 package handlers
 
 import (
+	"GoTodo/internal/config"
 	"GoTodo/internal/server/utils"
 	"GoTodo/internal/storage"
 	"context"
 	"fmt"
+	"html"
 	"net/http"
 	"strings"
 	"time"
@@ -19,30 +21,27 @@ func CalendarFeedHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	path := strings.TrimPrefix(r.URL.Path, "/cal/")
-	path = strings.TrimPrefix(path, utils.GetBasePath()+"/cal/")
-	token := strings.TrimSuffix(path, ".ics")
-	token = strings.Trim(token, "/")
-	if token == "" || strings.Contains(token, "/") {
-		http.NotFound(w, r)
+	token := parseCalendarTokenFromPath(r.URL.Path)
+	if token == "" {
+		writeEmptyICS(w)
 		return
 	}
 
 	userID, err := storage.GetUserByCalendarToken(token)
 	if err != nil {
-		http.NotFound(w, r)
+		writeEmptyICS(w)
 		return
 	}
 
-	db, err := storage.OpenDatabase()
+	pool, err := storage.OpenDatabase()
 	if err != nil {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
-	defer db.Close()
+	defer storage.CloseDatabase(pool)
 
 	ctx := context.Background()
-	rows, err := db.Query(ctx, `
+	rows, err := pool.Query(ctx, `
 		SELECT id, title, COALESCE(description, ''), CAST(due_date AS TEXT)
 		FROM tasks
 		WHERE user_id = $1 AND completed = false AND due_date IS NOT NULL
@@ -53,17 +52,9 @@ func CalendarFeedHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	var b strings.Builder
-	fmt.Fprintf(&b, "BEGIN:VCALENDAR\r\n")
-	fmt.Fprintf(&b, "VERSION:2.0\r\n")
-	fmt.Fprintf(&b, "PRODID:-//GoTodo//EN\r\n")
-	fmt.Fprintf(&b, "CALSCALE:GREGORIAN\r\n")
-	fmt.Fprintf(&b, "METHOD:PUBLISH\r\n")
-	fmt.Fprintf(&b, "X-WR-CALNAME:GoTodo\r\n")
-
 	now := time.Now().UTC().Format("20060102T150405Z")
-	fmt.Fprintf(&b, "DTSTAMP:%s\r\n", now)
-
+	var b strings.Builder
+	writeICSHeader(&b)
 	for rows.Next() {
 		var id int
 		var title, description, dueDate string
@@ -71,38 +62,80 @@ func CalendarFeedHandler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Database error", http.StatusInternalServerError)
 			return
 		}
-		icsDate := strings.ReplaceAll(dueDate, "-", "")
-		if icsDate == "" {
-			continue
-		}
-		fmt.Fprintf(&b, "BEGIN:VEVENT\r\n")
-		fmt.Fprintf(&b, "UID:gotodo-%d@gotodo\r\n", id)
-		fmt.Fprintf(&b, "DTSTART;VALUE=DATE:%s\r\n", icsDate)
-		fmt.Fprintf(&b, "SUMMARY:%s\r\n", icsEscape(title))
-		plainDesc := plainDescriptionForICS(description)
-		if plainDesc != "" {
-			fmt.Fprintf(&b, "DESCRIPTION:%s\r\n", icsEscape(plainDesc))
-		}
-		fmt.Fprintf(&b, "END:VEVENT\r\n")
+		writeICSEvent(&b, id, userID, title, description, dueDate, now)
 	}
-
+	if err := rows.Err(); err != nil {
+		http.Error(w, "Database error", http.StatusInternalServerError)
+		return
+	}
 	fmt.Fprintf(&b, "END:VCALENDAR\r\n")
 
 	w.Header().Set("Content-Type", "text/calendar; charset=utf-8")
 	w.Header().Set("Content-Disposition", `attachment; filename="gotodo.ics"`)
+	w.Header().Set("Cache-Control", "private, no-store")
 	w.Write([]byte(b.String()))
+}
+
+func writeEmptyICS(w http.ResponseWriter) {
+	var b strings.Builder
+	writeICSHeader(&b)
+	fmt.Fprintf(&b, "END:VCALENDAR\r\n")
+	w.Header().Set("Content-Type", "text/calendar; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="gotodo.ics"`)
+	w.Header().Set("Cache-Control", "private, no-store")
+	w.Write([]byte(b.String()))
+}
+
+func writeICSHeader(b *strings.Builder) {
+	fmt.Fprintf(b, "BEGIN:VCALENDAR\r\n")
+	fmt.Fprintf(b, "VERSION:2.0\r\n")
+	fmt.Fprintf(b, "PRODID:-//GoTodo//EN\r\n")
+	fmt.Fprintf(b, "CALSCALE:GREGORIAN\r\n")
+	fmt.Fprintf(b, "METHOD:PUBLISH\r\n")
+	fmt.Fprintf(b, "X-WR-CALNAME:GoTodo\r\n")
+}
+
+func writeICSEvent(b *strings.Builder, id, userID int, title, description, dueDate, dtstamp string) {
+	icsDate := strings.ReplaceAll(dueDate, "-", "")
+	if icsDate == "" {
+		return
+	}
+	endDate := icsDate
+	if t, err := time.Parse("20060102", icsDate); err == nil {
+		endDate = t.AddDate(0, 0, 1).Format("20060102")
+	}
+	fmt.Fprintf(b, "BEGIN:VEVENT\r\n")
+	icsWriteFolded(b, "UID", fmt.Sprintf("gotodo-u%d-t%d@gotodo", userID, id))
+	icsWriteFolded(b, "DTSTAMP", dtstamp)
+	icsWriteFolded(b, "DTSTART;VALUE=DATE", icsDate)
+	icsWriteFolded(b, "DTEND;VALUE=DATE", endDate)
+	icsWriteFolded(b, "SUMMARY", icsEscape(title))
+	plainDesc := plainDescriptionForICS(description)
+	if plainDesc != "" {
+		icsWriteFolded(b, "DESCRIPTION", icsEscape(plainDesc))
+	}
+	fmt.Fprintf(b, "END:VEVENT\r\n")
+}
+
+func parseCalendarTokenFromPath(path string) string {
+	path = strings.TrimPrefix(path, "/cal/")
+	base := utils.GetBasePath()
+	if base != "" && base != "/" {
+		path = strings.TrimPrefix(path, strings.TrimSuffix(base, "/")+"/cal/")
+		path = strings.TrimPrefix(path, base+"/cal/")
+	}
+	token := strings.TrimSuffix(path, ".ics")
+	token = strings.Trim(token, "/")
+	if token == "" || strings.Contains(token, "/") {
+		return ""
+	}
+	return token
 }
 
 // APICalendarRegenerateToken rotates the user's calendar feed token.
 func APICalendarRegenerateToken(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
-		return
-	}
-
-	email, _, _, _, loggedIn, _ := utils.GetSessionUserWithTimezone(r)
-	if !loggedIn {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 
@@ -117,9 +150,8 @@ func APICalendarRegenerateToken(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to regenerate token", http.StatusInternalServerError)
 		return
 	}
-	_ = email
 
-	feedURL := calendarFeedURL(r, token)
+	feedURL := html.EscapeString(calendarFeedURL(r, token))
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	fmt.Fprintf(w, `<label for="calendar-feed-url" class="form-label fw-bold">Subscribe URL</label><div class="input-group mb-2"><input type="text" class="form-control" id="calendar-feed-url" readonly value="%s" /><button type="button" class="btn btn-outline-secondary" id="copy-calendar-url" data-url="%s"><i class="bi bi-clipboard"></i> Copy</button></div><p class="text-muted small mb-0">Previous subscription links are now invalid.</p>`, feedURL, feedURL)
 }
@@ -141,6 +173,9 @@ func calendarFeedURLForRequest(r *http.Request, token string) string {
 }
 
 func requestScheme(r *http.Request) string {
+	if config.Cfg.UseHTTPS {
+		return "https"
+	}
 	if r.TLS != nil {
 		return "https"
 	}
@@ -159,6 +194,16 @@ func icsEscape(s string) string {
 	return s
 }
 
+// icsWriteFolded writes a property line with RFC 5545 folding (75 octets).
+func icsWriteFolded(b *strings.Builder, prop, value string) {
+	line := prop + ":" + value
+	for len(line) > 75 {
+		b.WriteString(line[:75] + "\r\n ")
+		line = line[75:]
+	}
+	b.WriteString(line + "\r\n")
+}
+
 func plainDescriptionForICS(md string) string {
 	md = strings.TrimSpace(md)
 	if md == "" {
@@ -169,4 +214,3 @@ func plainDescriptionForICS(md string) string {
 	plain = strings.Join(strings.Fields(plain), " ")
 	return plain
 }
-

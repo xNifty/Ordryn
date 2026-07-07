@@ -44,7 +44,7 @@ func APIUpdateTaskStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	defer db.Close()
+	defer storage.CloseDatabase(db)
 
 	var completed bool
 
@@ -130,6 +130,11 @@ func APIUpdateTaskStatus(w http.ResponseWriter, r *http.Request) {
 		completedCount, incompleteCount := completedIncompleteCounts(&ownerID, projectFilter)
 		// Emit HTMX trigger with counts payload so client can update badges
 		w.Header().Set("HX-Trigger", fmt.Sprintf(`{"taskCountsChanged":{"completed":%d,"incomplete":%d}}`, completedCount, incompleteCount))
+	}
+
+	if isCalendarReturn(r) {
+		respondCalendarRedirect(w, calendarMonthFromRequest(r, timezone), timezone)
+		return
 	}
 
 	if statusFilter != "" {

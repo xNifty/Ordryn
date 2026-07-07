@@ -25,7 +25,7 @@
         <link rel="stylesheet" href="{{basePath}}/public/css/{{if .UseMinifiedAssets}}site.min.css{{else}}site.css{{end}}?v={{.AssetVersion}}" />
         <link rel="stylesheet" href="{{basePath}}/public/vendor/bootstrap-icons/bootstrap-icons.css" />
     </head>
-    <body>
+    <body data-project-filter="{{.ProjectFilter}}">
         <div id="htmx-loading-bar" aria-hidden="true"></div>
         <div id="htmx-loading-indicator" class="htmx-indicator" aria-hidden="true" aria-live="polite">
             <span class="spinner-border spinner-border-sm" role="status"></span>
@@ -267,22 +267,6 @@
         </div>
         {{end}}
 
-        <script nonce="{{.CSPNonce}}">
-            // Ensure the project filter select reflects the server-side filter on full page load.
-            // This overrides browser form-value restoration so the dropdown doesn't persist an old selection.
-            document.addEventListener('DOMContentLoaded', function() {
-                try {
-                    var pf = "{{.ProjectFilter}}";
-                    var sel = document.getElementById('project-filter');
-                    if (sel) {
-                        sel.value = pf;
-                    }
-                } catch (e) {
-                    // ignore
-                }
-            });
-        </script>
-
         <div id="task-container" class="container" aria-live="polite" aria-atomic="false">
             {{template "pagination.html" .}}
         </div>
@@ -318,43 +302,5 @@
         <script src="{{basePath}}/public/vendor/sortable/Sortable.min.js" defer></script>
 
         {{template "site_script.html" .}}
-
-        <script nonce="{{.CSPNonce}}">
-            // Fade out feedback messages after 5 seconds
-            document.body.addEventListener("htmx:afterSwap", (event) => {
-                if (event.target.id === "status") {
-                    setTimeout(() => {
-                        event.target.style.display = "none";
-                    }, 5000);
-                }
-            });
-
-            // Clear form after submitting
-            document.body.addEventListener("task-added", (event) => {
-                document.getElementById("title").value = "";
-                document.getElementById("description").value = "";
-            });
-
-            // Remove logged_out query parameter from URL after showing message
-                (function() {
-                const urlParams = new URLSearchParams(window.location.search);
-                if (urlParams.get('logged_out') === 'true' || urlParams.get('account_created') === 'true') {
-                    // Remove the parameter(s) from URL without reloading
-                    urlParams.delete('logged_out');
-                    urlParams.delete('account_created');
-                    const newUrl = window.location.pathname + (urlParams.toString() ? '?' + urlParams.toString() : '');
-                    window.history.replaceState({}, '', newUrl);
-                    
-                    // Auto-dismiss the alert after 5 seconds
-                    setTimeout(() => {
-                        const alert = document.querySelector('#status');
-                        if (alert) {
-                            const bsAlert = bootstrap.Alert.getOrCreateInstance(alert);
-                            bsAlert.close();
-                        }
-                    }, 5000);
-                }
-            })();
-        </script>
     </body>
 </html>

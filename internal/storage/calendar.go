@@ -7,7 +7,7 @@ import (
 	"fmt"
 )
 
-// GetUserByCalendarToken returns the user ID for a valid calendar feed token.
+// GetUserByCalendarToken returns the user ID for a valid, non-banned calendar feed token.
 func GetUserByCalendarToken(token string) (int, error) {
 	if token == "" {
 		return 0, fmt.Errorf("invalid token")
@@ -19,12 +19,41 @@ func GetUserByCalendarToken(token string) (int, error) {
 	defer CloseDatabase(pool)
 
 	var userID int
+	var isBanned bool
 	err = pool.QueryRow(context.Background(),
-		"SELECT id FROM users WHERE calendar_token = $1", token).Scan(&userID)
+		`SELECT id, COALESCE(is_banned, FALSE) FROM users WHERE calendar_token = $1`, token).
+		Scan(&userID, &isBanned)
 	if err != nil {
 		return 0, fmt.Errorf("user not found")
 	}
+	if isBanned {
+		return 0, fmt.Errorf("user not found")
+	}
 	return userID, nil
+}
+
+// ClearCalendarToken removes the calendar feed token for a user (e.g. on ban).
+func ClearCalendarToken(userID int) error {
+	pool, err := OpenDatabase()
+	if err != nil {
+		return err
+	}
+	defer CloseDatabase(pool)
+	_, err = pool.Exec(context.Background(),
+		"UPDATE users SET calendar_token = NULL WHERE id = $1", userID)
+	return err
+}
+
+// ClearCalendarTokenByEmail clears calendar token by user email.
+func ClearCalendarTokenByEmail(email string) error {
+	pool, err := OpenDatabase()
+	if err != nil {
+		return err
+	}
+	defer CloseDatabase(pool)
+	_, err = pool.Exec(context.Background(),
+		"UPDATE users SET calendar_token = NULL WHERE email = $1", email)
+	return err
 }
 
 // GetOrCreateCalendarToken returns the user's calendar token, generating one if needed.

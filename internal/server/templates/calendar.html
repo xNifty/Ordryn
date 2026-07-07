@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en" {{if .Theme}}data-theme="{{.Theme}}"{{end}}>
+    <head>
+        <script nonce="{{.CSPNonce}}">
+            (function () {
+                try {
+                    if (!document.documentElement.getAttribute('data-theme')) {
+                        var theme = localStorage.getItem('theme');
+                        if (theme) document.documentElement.setAttribute('data-theme', theme);
+                    }
+                } catch (e) {}
+            })();
+        </script>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        {{template "htmx_config.html" .}}
+        <title>Calendar — {{.SiteName}}</title>
+        <link rel="stylesheet" href="{{basePath}}/public/vendor/bootstrap/css/bootstrap.min.css" />
+        <link rel="stylesheet" href="{{basePath}}/public/css/{{if .UseMinifiedAssets}}site.min.css{{else}}site.css{{end}}?v={{.AssetVersion}}" />
+        <link rel="stylesheet" href="{{basePath}}/public/vendor/bootstrap-icons/bootstrap-icons.css" />
+    </head>
+    <body class="calendar-page" data-calendar-month="{{.YearMonth}}">
+        {{template "navbar.html" .}}
+        <main>
+        <div class="container mt-4 mb-5 calendar-page-inner">
+            <div class="calendar-toolbar d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
+                <div>
+                    <h1 class="h3 mb-1">Task calendar</h1>
+                    <p class="text-muted mb-0 small">Incomplete tasks with due dates</p>
+                </div>
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    <div class="btn-group btn-group-sm" role="group" aria-label="Month navigation">
+                        <a class="btn btn-outline-secondary" href="{{basePath}}/calendar?month={{.Calendar.PrevMonth}}" aria-label="Previous month">
+                            <i class="bi bi-chevron-left"></i>
+                        </a>
+                        <a class="btn btn-outline-secondary" href="{{basePath}}/calendar?month={{.Calendar.TodayMonth}}">Today</a>
+                        <a class="btn btn-outline-secondary" href="{{basePath}}/calendar?month={{.Calendar.NextMonth}}" aria-label="Next month">
+                            <i class="bi bi-chevron-right"></i>
+                        </a>
+                    </div>
+                    <form method="get" class="d-flex gap-2 align-items-center">
+                        <input type="month" name="month" class="form-control form-control-sm" value="{{.YearMonth}}" aria-label="Select month" />
+                        <button type="submit" class="btn btn-sm btn-primary">Go</button>
+                    </form>
+                    <button type="button" class="btn btn-sm btn-success" id="calendar-add-task">
+                        <i class="bi bi-plus-lg"></i> Add task
+                    </button>
+                </div>
+            </div>
+
+            <h2 class="calendar-month-label h4 text-center mb-3">{{.Calendar.MonthLabel}}</h2>
+
+            {{template "calendar_grid.html" .}}
+
+            <div class="calendar-footer mt-4 d-flex flex-wrap justify-content-between align-items-center gap-2 text-muted small">
+                <span><i class="bi bi-circle-fill calendar-legend-overdue"></i> Overdue &nbsp; <i class="bi bi-circle-fill calendar-legend-today"></i> Due today</span>
+                <a href="{{basePath}}/profile#calendar-feed">Subscribe or sync via ICS on Profile</a>
+            </div>
+        </div>
+
+        <div id="modal" class="modal fade" tabindex="-1" role="dialog">
+            <div class="modal-dialog" role="document">
+                <div class="modal-content"></div>
+            </div>
+        </div>
+        {{template "sidebar.html" .}}
+        <div id="sidebar-backdrop" class="sidebar-backdrop" aria-hidden="true"></div>
+        </main>
+        {{template "footer.html" .}}
+        <script src="{{basePath}}/public/vendor/popper/popper.min.js" defer></script>
+        <script src="{{basePath}}/public/vendor/bootstrap/js/bootstrap.min.js" defer></script>
+        <script src="{{basePath}}/public/vendor/htmx/htmx.min.js" defer></script>
+        {{template "site_script.html" .}}
+    </body>
+</html>

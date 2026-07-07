@@ -15,10 +15,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const undoTTL = 60 * time.Second
+const undoTTL = 120 * time.Second
 
 // DeletedTaskSnapshot captures task state for undo restore.
 type DeletedTaskSnapshot struct {
+	ID          int
 	Title       string
 	Description string
 	DueDate     string
@@ -42,12 +43,12 @@ func snapshotTasksForUndo(ctx context.Context, db *pgxpool.Pool, ids []int, user
 		var projectID sql.NullInt64
 		var dueDate sql.NullString
 		err := db.QueryRow(ctx, `
-			SELECT title, COALESCE(description, ''), COALESCE(completed, false),
+			SELECT id, title, COALESCE(description, ''), COALESCE(completed, false),
 			       COALESCE(is_favorite, false), COALESCE(priority, 0), COALESCE(position, 0),
 			       project_id, COALESCE(CAST(due_date AS TEXT), '')
 			FROM tasks WHERE id = $1 AND user_id = $2`,
 			id, userID).Scan(
-			&snap.Title, &snap.Description, &snap.Completed, &snap.IsFavorite,
+			&snap.ID, &snap.Title, &snap.Description, &snap.Completed, &snap.IsFavorite,
 			&snap.Priority, &snap.Position, &projectID, &dueDate,
 		)
 		if err != nil {
@@ -165,7 +166,7 @@ func APIUndoDelete(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
 	}
-	defer db.Close()
+	defer storage.CloseDatabase(db)
 
 	ctx := context.Background()
 	if err := restoreDeletedTasks(ctx, db, *userID, pu.Tasks); err != nil {
@@ -226,29 +227,7 @@ func restoreDeletedTasks(ctx context.Context, db *pgxpool.Pool, userID int, task
 			position = snap.Position
 		}
 
-		var newID int
-		var err error
-		if snap.ProjectID != nil && snap.DueDate != "" {
-			err = db.QueryRow(ctx,
-				`INSERT INTO tasks (title, description, completed, user_id, time_stamp, position, priority, project_id, due_date, is_favorite)
-				 VALUES ($1,$2,$3,$4,NOW() AT TIME ZONE 'UTC',$5,$6,$7,$8,$9) RETURNING id`,
-				snap.Title, snap.Description, snap.Completed, userID, position, snap.Priority, *snap.ProjectID, snap.DueDate, snap.IsFavorite).Scan(&newID)
-		} else if snap.ProjectID != nil {
-			err = db.QueryRow(ctx,
-				`INSERT INTO tasks (title, description, completed, user_id, time_stamp, position, priority, project_id, is_favorite)
-				 VALUES ($1,$2,$3,$4,NOW() AT TIME ZONE 'UTC',$5,$6,$7,$8) RETURNING id`,
-				snap.Title, snap.Description, snap.Completed, userID, position, snap.Priority, *snap.ProjectID, snap.IsFavorite).Scan(&newID)
-		} else if snap.DueDate != "" {
-			err = db.QueryRow(ctx,
-				`INSERT INTO tasks (title, description, completed, user_id, time_stamp, position, priority, due_date, is_favorite)
-				 VALUES ($1,$2,$3,$4,NOW() AT TIME ZONE 'UTC',$5,$6,$7,$8) RETURNING id`,
-				snap.Title, snap.Description, snap.Completed, userID, position, snap.Priority, snap.DueDate, snap.IsFavorite).Scan(&newID)
-		} else {
-			err = db.QueryRow(ctx,
-				`INSERT INTO tasks (title, description, completed, user_id, time_stamp, position, priority, is_favorite)
-				 VALUES ($1,$2,$3,$4,NOW() AT TIME ZONE 'UTC',$5,$6,$7) RETURNING id`,
-				snap.Title, snap.Description, snap.Completed, userID, position, snap.Priority, snap.IsFavorite).Scan(&newID)
-		}
+		newID, err := insertRestoredTask(ctx, db, userID, snap, position)
 		if err != nil {
 			return err
 		}
@@ -257,7 +236,75 @@ func restoreDeletedTasks(ctx context.Context, db *pgxpool.Pool, userID int, task
 				return err
 			}
 		}
-		logTaskEvent(newID, userID, "created", map[string]interface{}{"restored": true})
+		logTaskEvent(newID, userID, "created", map[string]interface{}{"restored": true, "original_id": snap.ID})
 	}
+
+	_, _ = db.Exec(ctx, `SELECT setval(pg_get_serial_sequence('tasks', 'id'), GREATEST((SELECT COALESCE(MAX(id), 1) FROM tasks), 1))`)
 	return nil
+}
+
+func insertRestoredTask(ctx context.Context, db *pgxpool.Pool, userID int, snap DeletedTaskSnapshot, position int) (int, error) {
+	if snap.ID > 0 {
+		var exists bool
+		_ = db.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM tasks WHERE id = $1)", snap.ID).Scan(&exists)
+		if !exists {
+			var newID int
+			err := insertTaskWithID(ctx, db, snap.ID, userID, snap, position, &newID)
+			if err == nil {
+				return newID, nil
+			}
+		}
+	}
+	var newID int
+	err := insertTaskWithID(ctx, db, 0, userID, snap, position, &newID)
+	return newID, err
+}
+
+func insertTaskWithID(ctx context.Context, db *pgxpool.Pool, explicitID, userID int, snap DeletedTaskSnapshot, position int, outID *int) error {
+	if explicitID > 0 {
+		if snap.ProjectID != nil && snap.DueDate != "" {
+			return db.QueryRow(ctx,
+				`INSERT INTO tasks (id, title, description, completed, user_id, time_stamp, position, priority, project_id, due_date, is_favorite)
+				 VALUES ($1,$2,$3,$4,$5,NOW() AT TIME ZONE 'UTC',$6,$7,$8,$9,$10) RETURNING id`,
+				explicitID, snap.Title, snap.Description, snap.Completed, userID, position, snap.Priority, *snap.ProjectID, snap.DueDate, snap.IsFavorite).Scan(outID)
+		}
+		if snap.ProjectID != nil {
+			return db.QueryRow(ctx,
+				`INSERT INTO tasks (id, title, description, completed, user_id, time_stamp, position, priority, project_id, is_favorite)
+				 VALUES ($1,$2,$3,$4,$5,NOW() AT TIME ZONE 'UTC',$6,$7,$8,$9) RETURNING id`,
+				explicitID, snap.Title, snap.Description, snap.Completed, userID, position, snap.Priority, *snap.ProjectID, snap.IsFavorite).Scan(outID)
+		}
+		if snap.DueDate != "" {
+			return db.QueryRow(ctx,
+				`INSERT INTO tasks (id, title, description, completed, user_id, time_stamp, position, priority, due_date, is_favorite)
+				 VALUES ($1,$2,$3,$4,$5,NOW() AT TIME ZONE 'UTC',$6,$7,$8,$9) RETURNING id`,
+				explicitID, snap.Title, snap.Description, snap.Completed, userID, position, snap.Priority, snap.DueDate, snap.IsFavorite).Scan(outID)
+		}
+		return db.QueryRow(ctx,
+			`INSERT INTO tasks (id, title, description, completed, user_id, time_stamp, position, priority, is_favorite)
+			 VALUES ($1,$2,$3,$4,$5,NOW() AT TIME ZONE 'UTC',$6,$7,$8) RETURNING id`,
+			explicitID, snap.Title, snap.Description, snap.Completed, userID, position, snap.Priority, snap.IsFavorite).Scan(outID)
+	}
+	if snap.ProjectID != nil && snap.DueDate != "" {
+		return db.QueryRow(ctx,
+			`INSERT INTO tasks (title, description, completed, user_id, time_stamp, position, priority, project_id, due_date, is_favorite)
+			 VALUES ($1,$2,$3,$4,NOW() AT TIME ZONE 'UTC',$5,$6,$7,$8,$9) RETURNING id`,
+			snap.Title, snap.Description, snap.Completed, userID, position, snap.Priority, *snap.ProjectID, snap.DueDate, snap.IsFavorite).Scan(outID)
+	}
+	if snap.ProjectID != nil {
+		return db.QueryRow(ctx,
+			`INSERT INTO tasks (title, description, completed, user_id, time_stamp, position, priority, project_id, is_favorite)
+			 VALUES ($1,$2,$3,$4,NOW() AT TIME ZONE 'UTC',$5,$6,$7,$8) RETURNING id`,
+			snap.Title, snap.Description, snap.Completed, userID, position, snap.Priority, *snap.ProjectID, snap.IsFavorite).Scan(outID)
+	}
+	if snap.DueDate != "" {
+		return db.QueryRow(ctx,
+			`INSERT INTO tasks (title, description, completed, user_id, time_stamp, position, priority, due_date, is_favorite)
+			 VALUES ($1,$2,$3,$4,NOW() AT TIME ZONE 'UTC',$5,$6,$7,$8) RETURNING id`,
+			snap.Title, snap.Description, snap.Completed, userID, position, snap.Priority, snap.DueDate, snap.IsFavorite).Scan(outID)
+	}
+	return db.QueryRow(ctx,
+		`INSERT INTO tasks (title, description, completed, user_id, time_stamp, position, priority, is_favorite)
+		 VALUES ($1,$2,$3,$4,NOW() AT TIME ZONE 'UTC',$5,$6,$7) RETURNING id`,
+		snap.Title, snap.Description, snap.Completed, userID, position, snap.Priority, snap.IsFavorite).Scan(outID)
 }

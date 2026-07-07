@@ -46,7 +46,7 @@ func APIDeleteTask(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "Error opening database")
 		return
 	}
-	defer db.Close()
+	defer storage.CloseDatabase(db)
 
 	// Determine user ID (prefer session value)
 	var userID int

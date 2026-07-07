@@ -199,6 +199,7 @@ func appendFilterSQL(where string, args []interface{}, filters ListFilters, time
 	where += filters.projectCondition(tablePrefix)
 	where += filters.statusCondition(tablePrefix)
 	where, args = appendDueDateCondition(where, args, filters.DueFilter, timezone, tablePrefix)
+	where, args = appendCompletedWeekCondition(where, args, filters.CompletedFilter, timezone, tablePrefix)
 	where += filters.priorityCondition(tablePrefix)
 	where, args = appendTagCondition(where, args, filters.TagFilter, tablePrefix)
 	return where, args

@@ -73,6 +73,12 @@ func InitializeTemplates() error {
 			return template.HTML(RenderMarkdown(s))
 		},
 		"truncateDescription": TruncateDescription,
+		"calendarFromQuery": func(month string) string {
+			if len(month) != 7 {
+				return "&from=calendar"
+			}
+			return "&from=calendar&month=" + month
+		},
 	}).ParseGlob("internal/server/templates/*.html")
 	if err != nil {
 		return err

@@ -8,6 +8,7 @@ const FILTER_LABELS = {
   due: "Due",
   priority: "Priority",
   sort: "Sort",
+  completed: "Completed",
 };
 
 const DUE_LABELS = {
@@ -69,9 +70,38 @@ function getFilterValue(name) {
       if (!el || el.value !== "priority") return null;
       return "Priority";
     }
+    case "completed": {
+      const el = document.getElementById("completed-filter");
+      if (!el || !el.value) return null;
+      if (el.value === "week") return "This week";
+      return el.value;
+    }
     default:
       return null;
   }
+}
+
+export function syncFiltersToURL() {
+  const params = new URLSearchParams();
+  const append = (key, id) => {
+    const el = document.getElementById(id);
+    if (el && el.value) params.set(key, el.value);
+  };
+  append("project", "project-filter-value");
+  if (!params.has("project")) append("project", "project-filter");
+  append("status", "status-filter");
+  append("due", "due-filter");
+  append("completed", "completed-filter");
+  append("sort", "sort-filter");
+  append("priority", "priority-filter");
+  append("tag", "tag-filter");
+  const search = document.getElementById("search");
+  if (search && search.value) params.set("search", search.value);
+  const page = document.getElementById("current-page");
+  if (page && page.value && page.value !== "1") params.set("page", page.value);
+  const qs = params.toString();
+  const url = window.location.pathname + (qs ? "?" + qs : "");
+  window.history.replaceState({}, "", url);
 }
 
 export function clearFilter(key) {
@@ -111,6 +141,9 @@ export function clearFilter(key) {
     case "sort":
       setHiddenValue("sort-filter", "");
       syncSortButtonState();
+      break;
+    case "completed":
+      setHiddenValue("completed-filter", "");
       break;
     default:
       break;
@@ -242,6 +275,7 @@ export function initFilterToolbar() {
   document.body.addEventListener("htmx:afterSwap", (evt) => {
     if (evt.target && evt.target.id === "task-container") {
       updateFilterChips();
+      syncFiltersToURL();
     }
   });
 

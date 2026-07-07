@@ -3,7 +3,7 @@ import { swapTaskContainerHtml } from "./events.js";
 import { showToast } from "./notifications.js";
 import { appendFilterFields } from "./filter-fields.js";
 
-const UNDO_TOAST_MS = 60000;
+const UNDO_TOAST_MS = 120000;
 
 export function initUndoDelete() {
   document.body.addEventListener("task-deleted", (e) => {
