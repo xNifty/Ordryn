@@ -19,7 +19,10 @@
         <link rel="stylesheet" href="{{basePath}}/public/css/{{if .UseMinifiedAssets}}site.min.css{{else}}site.css{{end}}?v={{.AssetVersion}}" />
         <link rel="stylesheet" href="{{basePath}}/public/vendor/bootstrap-icons/bootstrap-icons.css" />
     </head>
-    <body class="calendar-page" data-calendar-month="{{.YearMonth}}">
+    <body class="calendar-page"
+        data-calendar-month="{{.YearMonth}}"
+        data-calendar-today="{{.Calendar.TodayMonth}}"
+        data-calendar-base="{{basePath}}">
         {{template "navbar.html" .}}
         <main>
         <div class="container mt-4 mb-5 calendar-page-inner">
@@ -30,25 +33,55 @@
                 </div>
                 <div class="d-flex flex-wrap align-items-center gap-2">
                     <div class="btn-group btn-group-sm" role="group" aria-label="Month navigation">
-                        <a class="btn btn-outline-secondary" href="{{basePath}}/calendar?month={{.Calendar.PrevMonth}}" aria-label="Previous month">
-                            <i class="bi bi-chevron-left"></i>
-                        </a>
-                        <a class="btn btn-outline-secondary" href="{{basePath}}/calendar?month={{.Calendar.TodayMonth}}">Today</a>
-                        <a class="btn btn-outline-secondary" href="{{basePath}}/calendar?month={{.Calendar.NextMonth}}" aria-label="Next month">
-                            <i class="bi bi-chevron-right"></i>
-                        </a>
+                        <form method="post" action="{{basePath}}/calendar" class="calendar-nav-form">
+                            <input type="hidden" name="month" value="{{.Calendar.PrevMonth}}" />
+                            <button type="submit" class="btn btn-outline-secondary" aria-label="Previous month">
+                                <i class="bi bi-chevron-left"></i>
+                            </button>
+                        </form>
+                        <form method="post" action="{{basePath}}/calendar" class="calendar-nav-form">
+                            <input type="hidden" name="month" value="{{.Calendar.TodayMonth}}" />
+                            <button type="submit" class="btn btn-outline-secondary">Today</button>
+                        </form>
+                        <form method="post" action="{{basePath}}/calendar" class="calendar-nav-form">
+                            <input type="hidden" name="month" value="{{.Calendar.NextMonth}}" />
+                            <button type="submit" class="btn btn-outline-secondary" aria-label="Next month">
+                                <i class="bi bi-chevron-right"></i>
+                            </button>
+                        </form>
                     </div>
-                    <form method="get" class="d-flex gap-2 align-items-center">
-                        <input type="month" name="month" class="form-control form-control-sm" value="{{.YearMonth}}" aria-label="Select month" />
-                        <button type="submit" class="btn btn-sm btn-primary">Go</button>
-                    </form>
+                    <div class="dropdown calendar-jump">
+                        <button type="button"
+                            class="btn btn-outline-secondary btn-sm dropdown-toggle calendar-jump-toggle"
+                            id="calendar-jump-toggle"
+                            data-bs-toggle="dropdown"
+                            data-bs-auto-close="outside"
+                            aria-expanded="false"
+                            aria-haspopup="dialog"
+                            aria-controls="calendar-jump-menu">
+                            <span id="calendar-jump-label">{{.Calendar.MonthLabel}}</span>
+                        </button>
+                        <div class="dropdown-menu calendar-jump-menu shadow"
+                            id="calendar-jump-menu"
+                            role="dialog"
+                            aria-label="Choose month">
+                            <div class="calendar-jump-header">
+                                <button type="button" class="btn btn-link btn-sm calendar-jump-year-btn p-0" id="calendar-jump-year-prev" aria-label="Previous year">
+                                    <i class="bi bi-chevron-left"></i>
+                                </button>
+                                <span class="calendar-jump-year" id="calendar-jump-year">{{.CalendarYear}}</span>
+                                <button type="button" class="btn btn-link btn-sm calendar-jump-year-btn p-0" id="calendar-jump-year-next" aria-label="Next year">
+                                    <i class="bi bi-chevron-right"></i>
+                                </button>
+                            </div>
+                            <div class="calendar-jump-months" id="calendar-jump-months" role="grid"></div>
+                        </div>
+                    </div>
                     <button type="button" class="btn btn-sm btn-success" id="calendar-add-task">
                         <i class="bi bi-plus-lg"></i> Add task
                     </button>
                 </div>
             </div>
-
-            <h2 class="calendar-month-label h4 text-center mb-3">{{.Calendar.MonthLabel}}</h2>
 
             {{template "calendar_grid.html" .}}
 

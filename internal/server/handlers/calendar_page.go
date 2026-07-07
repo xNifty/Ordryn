@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"GoTodo/internal/server/utils"
+	"GoTodo/internal/sessionstore"
 	"GoTodo/internal/storage"
 	"context"
 	"fmt"
@@ -10,6 +11,8 @@ import (
 	"strings"
 	"time"
 )
+
+const calendarViewMonthKey = "calendar_view_month"
 
 type calendarTask struct {
 	ID          int
@@ -36,29 +39,51 @@ type calendarMonthView struct {
 	Weeks      [][]calendarCell
 }
 
-// CalendarPageHandler renders an in-app month calendar of due tasks.
+// CalendarPageHandler renders the in-app calendar at /calendar.
+// The viewed month is stored in session (POST to change month; URL stays /calendar).
 func CalendarPageHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
-		return
-	}
-
 	email, _, permissions, timezone, loggedIn, userName := utils.GetSessionUserWithTimezone(r)
 	if !loggedIn {
 		http.Redirect(w, r, utils.GetBasePath()+"/", http.StatusSeeOther)
 		return
 	}
 
-	userID := utils.GetSessionUserID(r)
-	yearMonth := currentYearMonth(timezone)
-	if monthStr := r.URL.Query().Get("month"); len(monthStr) == 7 {
-		yearMonth = monthStr
+	calendarURL := calendarPageURL()
+
+	// Legacy /calendar/YYYY-MM or ?month= → session + clean URL
+	if legacy := calendarYearMonthFromPathString(r.URL.Path); isValidYearMonth(legacy) {
+		setCalendarViewMonth(w, r, legacy)
+		http.Redirect(w, r, calendarURL, http.StatusMovedPermanently)
+		return
 	}
+	if legacy := strings.TrimSpace(r.URL.Query().Get("month")); isValidYearMonth(legacy) {
+		setCalendarViewMonth(w, r, legacy)
+		http.Redirect(w, r, calendarURL, http.StatusMovedPermanently)
+		return
+	}
+
+	if r.Method == http.MethodPost {
+		if month := strings.TrimSpace(r.FormValue("month")); isValidYearMonth(month) {
+			setCalendarViewMonth(w, r, month)
+		}
+		http.Redirect(w, r, calendarURL, http.StatusSeeOther)
+		return
+	}
+	if r.Method != http.MethodGet {
+		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
+		return
+	}
+
+	userID := utils.GetSessionUserID(r)
+	yearMonth := getCalendarViewMonth(r, timezone)
 
 	view := calendarMonthView{}
 	if userID != nil {
 		view = buildCalendarMonth(*userID, timezone, yearMonth)
 	}
+
+	loc := loadLocation(timezone)
+	monthStart, _ := time.ParseInLocation("2006-01", yearMonth, loc)
 
 	ctx := map[string]interface{}{
 		"LoggedIn":      loggedIn,
@@ -71,6 +96,7 @@ func CalendarPageHandler(w http.ResponseWriter, r *http.Request) {
 		"ReturnTo":      "calendar",
 		"CalendarMonth": yearMonth,
 		"CurrentPage":   "1",
+		"CalendarYear":  monthStart.Year(),
 	}
 	if userID != nil {
 		if projs, err := storage.GetProjectsForUser(*userID); err == nil {
@@ -101,27 +127,80 @@ func loadLocation(tz string) *time.Location {
 	return loc
 }
 
+func getCalendarViewMonth(r *http.Request, timezone string) string {
+	sess, err := sessionstore.Store.Get(r, "session")
+	if err == nil && sess != nil {
+		if v, ok := sess.Values[calendarViewMonthKey]; ok {
+			if s, ok := v.(string); ok && isValidYearMonth(s) {
+				return s
+			}
+		}
+	}
+	return currentYearMonth(timezone)
+}
+
+func setCalendarViewMonth(w http.ResponseWriter, r *http.Request, month string) {
+	if !isValidYearMonth(month) {
+		return
+	}
+	sess, err := sessionstore.Store.Get(r, "session")
+	if err != nil {
+		return
+	}
+	sess.Values[calendarViewMonthKey] = month
+	_ = sess.Save(r, w)
+}
+
 func calendarMonthFromRequest(r *http.Request, timezone string) string {
-	month := strings.TrimSpace(r.FormValue("calendar_month"))
-	if month == "" {
-		month = strings.TrimSpace(r.URL.Query().Get("month"))
+	if month := strings.TrimSpace(r.FormValue("calendar_month")); isValidYearMonth(month) {
+		return month
 	}
-	if len(month) != 7 {
-		return currentYearMonth(timezone)
+	if isCalendarReturn(r) {
+		return getCalendarViewMonth(r, timezone)
 	}
-	return month
+	return currentYearMonth(timezone)
+}
+
+func isValidYearMonth(s string) bool {
+	if len(s) != 7 || s[4] != '-' {
+		return false
+	}
+	_, err := time.Parse("2006-01", s)
+	return err == nil
+}
+
+func calendarYearMonthFromPathString(path string) string {
+	base := strings.TrimSuffix(utils.GetBasePath(), "/")
+	prefix := base + "/calendar"
+	path = strings.TrimSuffix(path, "/")
+	if path == prefix {
+		return ""
+	}
+	if !strings.HasPrefix(path, prefix+"/") {
+		return ""
+	}
+	segment := strings.TrimPrefix(path, prefix+"/")
+	if isValidYearMonth(segment) {
+		return segment
+	}
+	return ""
+}
+
+func calendarPageURL() string {
+	return utils.GetBasePath() + "/calendar"
 }
 
 func isCalendarReturn(r *http.Request) bool {
 	return r.URL.Query().Get("from") == "calendar" || r.FormValue("return_to") == "calendar"
 }
 
-func respondCalendarRedirect(w http.ResponseWriter, month, timezone string) {
-	if len(month) != 7 {
-		month = currentYearMonth(timezone)
+func respondCalendarRedirect(w http.ResponseWriter, r *http.Request, month, timezone string) {
+	if isValidYearMonth(month) {
+		setCalendarViewMonth(w, r, month)
+	} else {
+		setCalendarViewMonth(w, r, currentYearMonth(timezone))
 	}
-	base := utils.GetBasePath()
-	w.Header().Set("HX-Redirect", base+"/calendar?month="+month)
+	w.Header().Set("HX-Redirect", calendarPageURL())
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprint(w, " ")
 }

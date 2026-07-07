@@ -2504,6 +2504,87 @@ button.theme-toggle:focus-visible {
     font-weight: 600;
 }
 
+.calendar-jump-toggle {
+    font-weight: 600;
+    min-width: 10rem;
+}
+
+.calendar-nav-form {
+    display: contents;
+}
+
+.calendar-jump-menu {
+    width: 16rem;
+    padding: 0.75rem !important;
+    border-radius: 0.5rem;
+}
+
+.calendar-jump-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--box-border);
+}
+
+.calendar-jump-year {
+    font-weight: 700;
+    font-size: 1rem;
+    color: var(--text-color);
+}
+
+.calendar-jump-year-btn {
+    color: var(--text-muted-color);
+    line-height: 1;
+}
+
+.calendar-jump-year-btn:hover {
+    color: var(--text-color);
+}
+
+.calendar-jump-months {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.35rem;
+}
+
+.calendar-jump-month {
+    border: none;
+    border-radius: 0.35rem;
+    padding: 0.45rem 0.25rem;
+    font-size: 0.8rem;
+    font-weight: 500;
+    background: transparent;
+    color: var(--text-color);
+    transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.calendar-jump-month:hover {
+    background: var(--section-label-bg);
+}
+
+.calendar-jump-month:focus-visible {
+    outline: 2px solid var(--bs-primary);
+    outline-offset: 1px;
+}
+
+.calendar-jump-month--active {
+    background: var(--bs-primary);
+    color: #fff;
+}
+
+.calendar-jump-month--active:hover {
+    background: var(--bs-primary);
+    color: #fff;
+    filter: brightness(1.08);
+}
+
+.calendar-jump-month--today:not(.calendar-jump-month--active) {
+    box-shadow: inset 0 0 0 1px var(--bs-primary);
+    color: var(--bs-primary);
+}
+
 .calendar-weekdays {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
@@ -2728,6 +2809,15 @@ button.theme-toggle:focus-visible {
 
 [data-theme="dark"] .calendar-cell--today .calendar-day-num {
     color: #9ec5fe;
+}
+
+[data-theme="dark"] .calendar-jump-menu {
+    background: var(--box-bg);
+    border-color: var(--box-border);
+}
+
+[data-theme="dark"] .calendar-jump-menu .dropdown-divider {
+    border-color: var(--box-border);
 }
 
 a.text-decoration-none .dashboard-stat-link .dashboard-stat-value,

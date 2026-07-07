@@ -133,7 +133,7 @@ func APIUpdateTaskStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if isCalendarReturn(r) {
-		respondCalendarRedirect(w, calendarMonthFromRequest(r, timezone), timezone)
+		respondCalendarRedirect(w, r, calendarMonthFromRequest(r, timezone), timezone)
 		return
 	}
 

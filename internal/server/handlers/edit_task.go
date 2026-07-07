@@ -98,10 +98,7 @@ func APIEditTaskForm(w http.ResponseWriter, r *http.Request) {
 	calendarMonth := ""
 	if r.URL.Query().Get("from") == "calendar" {
 		returnTo = "calendar"
-		calendarMonth = r.URL.Query().Get("month")
-		if len(calendarMonth) != 7 {
-			calendarMonth = currentYearMonth(timezone)
-		}
+		calendarMonth = calendarMonthFromRequest(r, timezone)
 	}
 
 	data := struct {
@@ -352,7 +349,7 @@ func APIEditTask(w http.ResponseWriter, r *http.Request) {
 
 	// Re-render the task row in place when it still matches the active filters.
 	if isCalendarReturn(r) {
-		respondCalendarRedirect(w, calendarMonthFromRequest(r, timezone), timezone)
+		respondCalendarRedirect(w, r, calendarMonthFromRequest(r, timezone), timezone)
 		return
 	}
 

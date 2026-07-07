@@ -60,16 +60,54 @@ func TestSortedCalendarDates(t *testing.T) {
 	}
 }
 
+func TestCalendarYearMonthFromLegacyPath(t *testing.T) {
+	cases := []struct {
+		path string
+		want string
+	}{
+		{"/calendar", ""},
+		{"/calendar/", ""},
+		{"/calendar/2026-03", "2026-03"},
+		{"/calendar/not-a-date", ""},
+	}
+	for _, tc := range cases {
+		got := calendarYearMonthFromPathString(tc.path)
+		if got != tc.want {
+			t.Errorf("path %q: got %q, want %q", tc.path, got, tc.want)
+		}
+	}
+}
+
+func TestCalendarPageURL(t *testing.T) {
+	if got := calendarPageURL(); got != "/calendar" {
+		t.Fatalf("calendarPageURL() = %q", got)
+	}
+}
+
 func TestCalendarMonthFromRequest(t *testing.T) {
-	r := httptest.NewRequest("GET", "/calendar?month=2026-03", nil)
+	r := httptest.NewRequest("POST", "/api/edit-task", nil)
+	r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	r.Form = map[string][]string{"calendar_month": {"2026-03"}}
 	if got := calendarMonthFromRequest(r, "UTC"); got != "2026-03" {
 		t.Fatalf("got %q", got)
 	}
 }
 
 func TestIsCalendarReturn(t *testing.T) {
-	r := httptest.NewRequest("GET", "/api/edit?from=calendar&month=2026-01", nil)
+	r := httptest.NewRequest("GET", "/api/edit?from=calendar", nil)
 	if !isCalendarReturn(r) {
 		t.Fatal("expected calendar return from query")
+	}
+}
+
+func TestIsValidYearMonth(t *testing.T) {
+	if !isValidYearMonth("2026-07") {
+		t.Fatal("expected valid")
+	}
+	if isValidYearMonth("2026-13") {
+		t.Fatal("expected invalid month")
+	}
+	if isValidYearMonth("bad") {
+		t.Fatal("expected invalid")
 	}
 }
