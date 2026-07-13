@@ -78,16 +78,16 @@ function prependAPIKeyRow(data) {
   const list = ensureAPIKeyListContainer();
   if (!list || !data) return;
   const row = document.createElement("div");
-  row.className = "api-key-row";
+  row.className = "api-key-card";
   row.innerHTML = `
-    <div class="api-key-row-main">
-      <div class="api-key-name"></div>
-      <span class="api-key-prefix"></span>
-      <div class="api-key-meta text-muted small"></div>
-    </div>
-    <button type="button" class="btn btn-outline-danger btn-sm revoke-api-key-btn flex-shrink-0">Revoke</button>`;
+    <span class="api-key-name"></span>
+    <span class="api-key-prefix"></span>
+    <span class="api-key-meta"></span>
+    <button type="button" class="btn btn-outline-danger btn-sm revoke-api-key-btn">Revoke</button>`;
   row.querySelector(".api-key-name").textContent = data.name || "API key";
   row.querySelector(".api-key-prefix").textContent = data.key_prefix || "";
+  row.querySelector(".api-key-prefix").title =
+    "Key prefix (full key shown only at creation)";
   row.querySelector(".api-key-meta").textContent =
     "Created " + formatAPIKeyDate(data.created_at);
   const revokeBtn = row.querySelector(".revoke-api-key-btn");
@@ -358,7 +358,7 @@ export function initProfilePage() {
           return;
         }
         showToast("API key revoked.");
-        revokeBtn.closest(".api-key-row")?.remove();
+        revokeBtn.closest(".api-key-card")?.remove();
       } catch {
         showToast("Failed to revoke key.", { error: true });
       }

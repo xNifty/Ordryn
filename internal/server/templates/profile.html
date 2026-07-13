@@ -167,13 +167,11 @@
                                     {{if .APIKeys}}
                                     <div class="api-key-list">
                                         {{range .APIKeys}}
-                                        <div class="api-key-row">
-                                            <div class="api-key-row-main">
-                                                <div class="api-key-name">{{.Name}}</div>
-                                                <span class="api-key-prefix" title="Key prefix (full key shown only at creation)">{{.KeyPrefix}}</span>
-                                                <div class="api-key-meta text-muted small">Created {{.CreatedAt}}{{if .LastUsedAt}} · Last used {{.LastUsedAt}}{{end}}</div>
-                                            </div>
-                                            <button type="button" class="btn btn-outline-danger btn-sm revoke-api-key-btn flex-shrink-0" data-key-id="{{.ID}}">Revoke</button>
+                                        <div class="api-key-card">
+                                            <span class="api-key-name">{{.Name}}</span>
+                                            <span class="api-key-prefix" title="Key prefix (full key shown only at creation)">{{.KeyPrefix}}</span>
+                                            <span class="api-key-meta">Created {{.CreatedAt}}{{if .LastUsedAt}} · Last used {{.LastUsedAt}}{{end}}</span>
+                                            <button type="button" class="btn btn-outline-danger btn-sm revoke-api-key-btn" data-key-id="{{.ID}}">Revoke</button>
                                         </div>
                                         {{end}}
                                     </div>
