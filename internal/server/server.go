@@ -148,7 +148,8 @@ func StartServer() error {
 	handleBoth("/api/v1/tasks", v1(handlers.APIV1TasksRouter))
 	handleBoth("/api/v1/tasks/", v1(handlers.APIV1TasksRouter))
 	handleBoth("/api/v1/projects", v1(handlers.APIV1Projects))
-	handleBoth("/api/v1/tags", v1(handlers.APIV1Tags))
+	handleBoth("/api/v1/tags", v1(handlers.APIV1TagsRouter))
+	handleBoth("/api/v1/tags/", v1(handlers.APIV1TagsRouter))
 
 	handleBoth("/api/update-profile", utils.RequireHTMX(utils.RequireAuth(utils.RequireCSRF(handlers.APIUpdateProfile))))
 	handleBoth("/api/change-password", utils.RequireHTMX(utils.RequireAuth(utils.RequireCSRF(handlers.APIChangePassword))))

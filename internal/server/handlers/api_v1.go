@@ -72,6 +72,14 @@ type apiProjectJSON struct {
 	Name string `json:"name"`
 }
 
+type apiTagCreateRequest struct {
+	Name string `json:"name"`
+}
+
+func tagToAPIJSON(t storage.Tag) apiTagJSON {
+	return apiTagJSON{ID: t.ID, Name: t.Name, Color: t.Color}
+}
+
 func apiUserFromRequest(r *http.Request) (int, bool) {
 	return utils.GetAPIUserID(r)
 }
@@ -516,12 +524,34 @@ func APIV1Projects(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(out)
 }
 
-// APIV1Tags returns the user's tags.
-func APIV1Tags(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		utils.APIJSONError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Method not allowed.")
+// APIV1TagsRouter handles /api/v1/tags and /api/v1/tags/{id}.
+func APIV1TagsRouter(w http.ResponseWriter, r *http.Request) {
+	sub := utils.ParseAPIV1Subpath(r, "tags")
+	if sub == "" {
+		switch r.Method {
+		case http.MethodGet:
+			apiV1ListTags(w, r)
+		case http.MethodPost:
+			apiV1CreateTag(w, r)
+		default:
+			utils.APIJSONError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Method not allowed.")
+		}
 		return
 	}
+	id, err := strconv.Atoi(sub)
+	if err != nil || id <= 0 {
+		utils.APIJSONError(w, http.StatusBadRequest, "invalid_request", "Invalid tag id.")
+		return
+	}
+	switch r.Method {
+	case http.MethodDelete:
+		apiV1DeleteTag(w, r, id)
+	default:
+		utils.APIJSONError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Method not allowed.")
+	}
+}
+
+func apiV1ListTags(w http.ResponseWriter, r *http.Request) {
 	userID, ok := apiUserFromRequest(r)
 	if !ok {
 		utils.APIJSONError(w, http.StatusUnauthorized, "unauthorized", "Not authenticated.")
@@ -534,8 +564,68 @@ func APIV1Tags(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]apiTagJSON, 0, len(tags))
 	for _, t := range tags {
-		out = append(out, apiTagJSON{ID: t.ID, Name: t.Name, Color: t.Color})
+		out = append(out, tagToAPIJSON(t))
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	json.NewEncoder(w).Encode(out)
+}
+
+func apiV1CreateTag(w http.ResponseWriter, r *http.Request) {
+	userID, ok := apiUserFromRequest(r)
+	if !ok {
+		utils.APIJSONError(w, http.StatusUnauthorized, "unauthorized", "Not authenticated.")
+		return
+	}
+	var req apiTagCreateRequest
+	if err := decodeJSONBody(r, &req); err != nil {
+		utils.APIJSONError(w, http.StatusBadRequest, "invalid_request", "Invalid JSON body.")
+		return
+	}
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		utils.APIJSONError(w, http.StatusBadRequest, "invalid_request", "Tag name is required.")
+		return
+	}
+	tag, err := storage.GetOrCreateTagByName(userID, name)
+	if err != nil {
+		utils.APIJSONError(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(tagToAPIJSON(*tag))
+}
+
+func apiV1DeleteTag(w http.ResponseWriter, r *http.Request, tagID int) {
+	userID, ok := apiUserFromRequest(r)
+	if !ok {
+		utils.APIJSONError(w, http.StatusUnauthorized, "unauthorized", "Not authenticated.")
+		return
+	}
+	db, err := storage.OpenDatabase()
+	if err != nil {
+		utils.APIJSONError(w, http.StatusInternalServerError, "internal_error", "Database error.")
+		return
+	}
+	defer storage.CloseDatabase(db)
+
+	var ownerID int
+	err = db.QueryRow(context.Background(), `SELECT user_id FROM tags WHERE id = $1`, tagID).Scan(&ownerID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			utils.APIJSONError(w, http.StatusNotFound, "not_found", "Tag not found.")
+			return
+		}
+		utils.APIJSONError(w, http.StatusInternalServerError, "internal_error", "Database error.")
+		return
+	}
+	if ownerID != userID {
+		utils.APIJSONError(w, http.StatusNotFound, "not_found", "Tag not found.")
+		return
+	}
+	if err := storage.DeleteTag(tagID, userID); err != nil {
+		utils.APIJSONError(w, http.StatusInternalServerError, "internal_error", "Failed to delete tag.")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
