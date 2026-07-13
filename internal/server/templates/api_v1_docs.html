@@ -84,6 +84,8 @@
                             <tr><td><span class="badge bg-danger">DELETE</span></td><td><code>/api/v1/tasks/{id}</code></td><td>Delete a task</td></tr>
                             <tr><td><span class="badge bg-success">GET</span></td><td><code>/api/v1/projects</code></td><td>List projects</td></tr>
                             <tr><td><span class="badge bg-success">GET</span></td><td><code>/api/v1/tags</code></td><td>List tags</td></tr>
+                            <tr><td><span class="badge bg-primary">POST</span></td><td><code>/api/v1/tags</code></td><td>Create a tag</td></tr>
+                            <tr><td><span class="badge bg-danger">DELETE</span></td><td><code>/api/v1/tags/{id}</code></td><td>Delete a tag</td></tr>
                         </tbody>
                     </table>
 
@@ -245,14 +247,32 @@
                     </p>
 
                     <h2 id="tags" class="h4 mt-4">Tags</h2>
+
+                    <h3 class="h5 mt-3">List tags</h3>
                     <p><span class="badge bg-success">GET</span> <code>/api/v1/tags</code></p>
                     <p>Returns a JSON array of tag objects:</p>
                     <pre class="api-docs-pre"><code>[
   { "id": 1, "name": "urgent", "color": "#dc3545" },
   { "id": 2, "name": "home", "color": "#198754" }
 ]</code></pre>
+
+                    <h3 class="h5 mt-3">Create tag</h3>
+                    <p><span class="badge bg-primary">POST</span> <code>/api/v1/tags</code></p>
+                    <p>JSON body:</p>
+                    <pre class="api-docs-pre"><code>{
+  "name": "errands"    // required, max 50 characters
+}</code></pre>
+                    <p>
+                        Returns <code>201 Created</code> with the tag object.
+                        Names are unique per user (case-insensitive); if a tag with the same name already exists, that tag is returned.
+                    </p>
+
+                    <h3 class="h5 mt-3">Delete tag</h3>
+                    <p><span class="badge bg-danger">DELETE</span> <code>/api/v1/tags/{id}</code></p>
+                    <p>Removes the tag and its associations on tasks. Returns <code>204 No Content</code> on success.</p>
+
                     <p class="text-muted small mb-0">
-                        Tags are managed through the web UI. Pass <code>tag_ids</code> when creating or updating tasks.
+                        Pass <code>tag_ids</code> when creating or updating tasks to assign tags.
                     </p>
                 </div>
             </div>
