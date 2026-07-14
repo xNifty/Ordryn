@@ -105,6 +105,7 @@ The app uses `github.com/jackc/pgx/v5/pgxpool`. There are helper/migration funct
 ## Development notes
 
 - Code is organized under `internal/` with clear separation for handlers, templates, storage, and utils.
+- API contracts and examples are documented in [`docs/API.md`](docs/API.md).
 - If you want automated asset versioning, set `ASSET_VERSION` in your CI/CD pipeline (build timestamp or git SHA).
 
 ## Where to look
