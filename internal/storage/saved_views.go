@@ -22,14 +22,13 @@ var (
 // SavedViewFilter contains the task-list query parameters stored by a view.
 // Page is intentionally excluded so applying a view starts at the first page.
 type SavedViewFilter struct {
-	Project   string `json:"project"`
-	Status    string `json:"status"`
-	Due       string `json:"due"`
-	Completed string `json:"completed"`
-	Priority  string `json:"priority"`
-	Tag       string `json:"tag"`
-	Sort      string `json:"sort"`
-	Search    string `json:"search"`
+	Project  string `json:"project"`
+	Status   string `json:"status"`
+	Due      string `json:"due"`
+	Priority string `json:"priority"`
+	Tag      string `json:"tag"`
+	Sort     string `json:"sort"`
+	Search   string `json:"search"`
 }
 
 // SavedView is a user-owned named task filter.
@@ -152,17 +151,18 @@ func CreateSavedView(userID int, name string, filter SavedViewFilter, sortOrder 
 		return nil, fmt.Errorf("failed to lock saved view owner: %w", err)
 	}
 
-	var count, nextSortOrder int
+	var count int
 	if err := tx.QueryRow(context.Background(), `
-		SELECT COUNT(*), COALESCE(MAX(sort_order), -1) + 1
+		SELECT COUNT(*)
 		FROM saved_views
 		WHERE user_id = $1
-	`, userID).Scan(&count, &nextSortOrder); err != nil {
+	`, userID).Scan(&count); err != nil {
 		return nil, fmt.Errorf("failed to count saved views: %w", err)
 	}
 	if count >= MaxSavedViewsPerUser {
 		return nil, ErrSavedViewLimit
 	}
+	nextSortOrder := count
 	if sortOrder != nil {
 		nextSortOrder = *sortOrder
 	}

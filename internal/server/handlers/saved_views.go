@@ -17,6 +17,7 @@ const (
 	maxSavedViewNameLength   = 80
 	maxSavedViewSearchLength = 500
 	maxSavedViewRequestBytes = 1 << 20
+	maxSavedViewSortOrder    = 2147483647
 )
 
 type savedViewAPIResponse struct {
@@ -113,8 +114,8 @@ func apiV1CreateSavedView(w http.ResponseWriter, r *http.Request, userID int) {
 		writeSavedViewAPIError(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
-	if request.SortOrder != nil && *request.SortOrder < 0 {
-		writeSavedViewAPIError(w, http.StatusBadRequest, "invalid_request", "sort_order must be zero or greater.")
+	if request.SortOrder != nil && (*request.SortOrder < 0 || *request.SortOrder > maxSavedViewSortOrder) {
+		writeSavedViewAPIError(w, http.StatusBadRequest, "invalid_request", "sort_order must be between 0 and 2147483647.")
 		return
 	}
 
@@ -139,6 +140,10 @@ func apiV1UpdateSavedView(w http.ResponseWriter, r *http.Request, userID, id int
 		writeSavedViewAPIError(w, http.StatusBadRequest, "invalid_request", "At least one field must be provided.")
 		return
 	}
+	if r.Method == http.MethodPut && (request.Name == nil || request.Filter == nil) {
+		writeSavedViewAPIError(w, http.StatusBadRequest, "invalid_request", "PUT requires both name and filter.")
+		return
+	}
 
 	var name *string
 	if request.Name != nil {
@@ -159,8 +164,8 @@ func apiV1UpdateSavedView(w http.ResponseWriter, r *http.Request, userID, id int
 		}
 		filter = &validated
 	}
-	if request.SortOrder != nil && *request.SortOrder < 0 {
-		writeSavedViewAPIError(w, http.StatusBadRequest, "invalid_request", "sort_order must be zero or greater.")
+	if request.SortOrder != nil && (*request.SortOrder < 0 || *request.SortOrder > maxSavedViewSortOrder) {
+		writeSavedViewAPIError(w, http.StatusBadRequest, "invalid_request", "sort_order must be between 0 and 2147483647.")
 		return
 	}
 
@@ -274,12 +279,6 @@ func validateSavedViewFilter(filter *storage.SavedViewFilter) (storage.SavedView
 	if rawDue != "" && normalized.Due == "" {
 		return storage.SavedViewFilter{}, errors.New("filter.due must be \"overdue\", \"today\", \"week\", or \"none\".")
 	}
-
-	rawCompleted := strings.ToLower(strings.TrimSpace(filter.Completed))
-	if rawCompleted != "" && rawCompleted != "week" {
-		return storage.SavedViewFilter{}, errors.New("filter.completed must be \"week\".")
-	}
-	normalized.Completed = rawCompleted
 
 	rawPriority := strings.TrimSpace(filter.Priority)
 	normalized.Priority = normalizePriorityFilter(rawPriority)
