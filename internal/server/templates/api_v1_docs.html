@@ -237,6 +237,8 @@
                     <p>
                         Updates manual sort order (<code>position</code>) within one favorite or non-favorite group,
                         matching the web drag-and-drop behavior. Tasks cannot move across favorite groups.
+                        Listed IDs are rearranged among the slots they already occupy, so filtered lists
+                        (e.g. incomplete-only) do not overwrite unrelated tasks.
                     </p>
                     <pre class="api-docs-pre"><code>{
   "task_ids": [12, 5, 9],   // required: new order for this page window

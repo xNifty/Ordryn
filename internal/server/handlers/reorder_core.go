@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -11,43 +12,44 @@ import (
 // ErrReorderValidation is returned when task IDs fail ownership/favorite/project checks.
 var ErrReorderValidation = errors.New("reorder validation failed")
 
-// applyPageWindowOrder replaces the page window in allIDs with orderedIDs.
-func applyPageWindowOrder(allIDs []int, orderedIDs []int, page, pageSize int) []int {
+// applyRelativeReorder places orderedIDs into the slots those IDs currently occupy
+// in allIDs. This supports full-page reorder and filtered subsets (e.g. incomplete-only)
+// without overwriting unrelated tasks such as completed ones outside the client list.
+func applyRelativeReorder(allIDs []int, orderedIDs []int) ([]int, error) {
 	if len(orderedIDs) == 0 {
-		return allIDs
+		return allIDs, nil
 	}
+
+	indexOf := make(map[int]int, len(allIDs))
+	for i, id := range allIDs {
+		indexOf[id] = i
+	}
+
+	slots := make([]int, 0, len(orderedIDs))
+	seen := make(map[int]struct{}, len(orderedIDs))
+	for _, id := range orderedIDs {
+		if _, dup := seen[id]; dup {
+			return nil, fmt.Errorf("%w: duplicate task id %d", ErrReorderValidation, id)
+		}
+		seen[id] = struct{}{}
+		idx, ok := indexOf[id]
+		if !ok {
+			return nil, fmt.Errorf("%w: task %d not in reorder group", ErrReorderValidation, id)
+		}
+		slots = append(slots, idx)
+	}
+	sort.Ints(slots)
+
 	out := make([]int, len(allIDs))
 	copy(out, allIDs)
-
-	if page < 1 {
-		page = 1
+	for i, slot := range slots {
+		out[slot] = orderedIDs[i]
 	}
-	if pageSize < 1 {
-		pageSize = 50
-	}
-
-	start := (page - 1) * pageSize
-	if start < 0 {
-		start = 0
-	}
-	if start > len(out)-len(orderedIDs) {
-		start = len(out) - len(orderedIDs)
-		if start < 0 {
-			start = 0
-		}
-	}
-
-	for i, id := range orderedIDs {
-		if start+i < len(out) {
-			out[start+i] = id
-		} else {
-			out = append(out, id)
-		}
-	}
-	return out
+	return out, nil
 }
 
 // reorderTaskPositions validates IDs and renumbers position within a favorite/project group.
+// page and pageSize are retained for call-site compatibility but relative slot placement is used.
 func reorderTaskPositions(
 	ctx context.Context,
 	db *pgxpool.Pool,
@@ -57,6 +59,8 @@ func reorderTaskPositions(
 	page, pageSize int,
 	projectFilter *int,
 ) error {
+	_ = page
+	_ = pageSize
 	if len(ids) == 0 {
 		return fmt.Errorf("%w: empty task_ids", ErrReorderValidation)
 	}
@@ -116,7 +120,10 @@ func reorderTaskPositions(
 		return nil
 	}
 
-	allIDs = applyPageWindowOrder(allIDs, ids, page, pageSize)
+	allIDs, err = applyRelativeReorder(allIDs, ids)
+	if err != nil {
+		return err
+	}
 
 	tx, err := db.Begin(ctx)
 	if err != nil {

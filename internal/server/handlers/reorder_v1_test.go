@@ -11,21 +11,32 @@ import (
 	"GoTodo/internal/server/utils"
 )
 
-func TestApplyPageWindowOrder(t *testing.T) {
+func TestApplyRelativeReorder(t *testing.T) {
 	all := []int{1, 2, 3, 4, 5, 6}
-	got := applyPageWindowOrder(all, []int{3, 1, 2}, 1, 3)
+	got, err := applyRelativeReorder(all, []int{3, 1, 2})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	want := []int{3, 1, 2, 4, 5, 6}
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("page 1 = %v, want %v", got, want)
+		t.Fatalf("full page = %v, want %v", got, want)
 	}
 
-	got = applyPageWindowOrder(all, []int{6, 4, 5}, 2, 3)
-	want = []int{1, 2, 3, 6, 4, 5}
+	// Filtered subset (e.g. incomplete-only): keep completed slots, reorder subset.
+	all = []int{10, 20, 30, 40, 50} // 10,40 completed; 20,30,50 incomplete
+	got, err = applyRelativeReorder(all, []int{50, 20, 30})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want = []int{10, 50, 20, 40, 30}
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("page 2 = %v, want %v", got, want)
+		t.Fatalf("subset = %v, want %v", got, want)
 	}
 
-	got = applyPageWindowOrder(all, nil, 1, 3)
+	got, err = applyRelativeReorder(all, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if !reflect.DeepEqual(got, all) {
 		t.Fatalf("empty order mutated list: %v", got)
 	}
