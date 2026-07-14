@@ -67,6 +67,18 @@ type apiTaskPatchRequest struct {
 	ClearDue    *bool   `json:"clear_due_date"`
 }
 
+type apiTaskReorderRequest struct {
+	TaskIDs  []int   `json:"task_ids"`
+	Favorite *bool   `json:"favorite"`
+	Page     *int    `json:"page"`
+	PerPage  *int    `json:"per_page"`
+	Project  *string `json:"project"`
+}
+
+type apiReorderOKResponse struct {
+	OK bool `json:"ok"`
+}
+
 type apiProjectJSON struct {
 	ID   int    `json:"id"`
 	Name string `json:"name"`
@@ -124,7 +136,7 @@ func decodeJSONBody(r *http.Request, dest interface{}) error {
 	return json.Unmarshal(body, dest)
 }
 
-// APIV1TasksRouter handles /api/v1/tasks and /api/v1/tasks/{id}.
+// APIV1TasksRouter handles /api/v1/tasks, /api/v1/tasks/reorder, and /api/v1/tasks/{id}.
 func APIV1TasksRouter(w http.ResponseWriter, r *http.Request) {
 	sub := utils.ParseAPIV1Subpath(r, "tasks")
 	if sub == "" {
@@ -136,6 +148,14 @@ func APIV1TasksRouter(w http.ResponseWriter, r *http.Request) {
 		default:
 			utils.APIJSONError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Method not allowed.")
 		}
+		return
+	}
+	if sub == "reorder" {
+		if r.Method != http.MethodPost {
+			utils.APIJSONError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Method not allowed.")
+			return
+		}
+		apiV1ReorderTasks(w, r)
 		return
 	}
 	id, err := strconv.Atoi(sub)
@@ -498,6 +518,61 @@ func apiV1DeleteTask(w http.ResponseWriter, r *http.Request, taskID int) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func apiV1ReorderTasks(w http.ResponseWriter, r *http.Request) {
+	userID, ok := apiUserFromRequest(r)
+	if !ok {
+		utils.APIJSONError(w, http.StatusUnauthorized, "unauthorized", "Not authenticated.")
+		return
+	}
+
+	var req apiTaskReorderRequest
+	if err := decodeJSONBody(r, &req); err != nil {
+		utils.APIJSONError(w, http.StatusBadRequest, "invalid_request", "Invalid JSON body.")
+		return
+	}
+	if len(req.TaskIDs) == 0 {
+		utils.APIJSONError(w, http.StatusBadRequest, "invalid_request", "task_ids is required.")
+		return
+	}
+	if req.Favorite == nil {
+		utils.APIJSONError(w, http.StatusBadRequest, "invalid_request", "favorite is required.")
+		return
+	}
+
+	page := 1
+	if req.Page != nil && *req.Page > 0 {
+		page = *req.Page
+	}
+	perPage := 50
+	if req.PerPage != nil && *req.PerPage > 0 && *req.PerPage <= 100 {
+		perPage = *req.PerPage
+	}
+
+	var projectFilter *int
+	if req.Project != nil {
+		projectFilter = parseProjectFilter(*req.Project)
+	}
+
+	db, err := storage.OpenDatabase()
+	if err != nil {
+		utils.APIJSONError(w, http.StatusInternalServerError, "internal_error", "Database error.")
+		return
+	}
+	defer storage.CloseDatabase(db)
+
+	if err := reorderTaskPositions(context.Background(), db, userID, req.TaskIDs, *req.Favorite, page, perPage, projectFilter); err != nil {
+		if errors.Is(err, ErrReorderValidation) {
+			utils.APIJSONError(w, http.StatusBadRequest, "invalid_request", "Task does not belong to user or mismatched favorite group/project.")
+			return
+		}
+		utils.APIJSONError(w, http.StatusInternalServerError, "internal_error", "Failed to reorder tasks.")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	json.NewEncoder(w).Encode(apiReorderOKResponse{OK: true})
 }
 
 // APIV1Projects returns the user's projects.
