@@ -111,6 +111,11 @@ func StartServer() error {
 	http.HandleFunc("/api/import", utils.RequireHTMX(utils.RequireAuth(handlers.APIImportTasks)))
 	http.HandleFunc("/api/tags/delete", utils.RequireHTMX(utils.RequireAuth(handlers.APIDeleteTag)))
 
+	// Saved views JSON API. Authentication is handled by the router so
+	// unauthorized clients receive JSON rather than an HTML redirect.
+	http.HandleFunc("/api/v1/saved-views", handlers.APIV1SavedViewsRouter)
+	http.HandleFunc("/api/v1/saved-views/", handlers.APIV1SavedViewsRouter)
+
 	// Profile API endpoints
 	http.HandleFunc("/api/update-timezone", utils.RequireHTMX(handlers.APIUpdateTimezone))
 	http.HandleFunc("/api/update-profile", utils.RequireHTMX(handlers.APIUpdateProfile))
