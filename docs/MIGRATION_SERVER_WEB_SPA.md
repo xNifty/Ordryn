@@ -2,12 +2,33 @@
 
 **Status:** Locked direction (planning)  
 **Owner:** maintainers  
-**Baseline:** `origin/dev` @ `ae8a7b4` (v0.18.1-beta) — **not** `main` (behind)  
+**Working branch:** `cursor/server-split-f103` (“Server Split”) — **all migration work lands here**  
+**Do not touch:** `dev` (maintainer merges `dev` → `main` separately first)  
+**Reference snapshot:** `origin/dev` @ `ae8a7b4` (v0.18.1-beta) — inventory only; not a commit target  
 **Related:** Android separate-repo plan on `cursor/android-app-plan-398b` → `planning/ANDROID_APP.md`  
 **Last updated:** 2026-07-16
 
 This document is the durable source of truth for the architecture migration.  
 Future agents and sessions should treat decisions marked **LOCKED** as settled unless a maintainer explicitly revises this file.
+
+---
+
+## 0. Branch workflow (read first)
+
+```mermaid
+flowchart LR
+  devBranch[dev] -->|"maintainer merges first"| mainBranch[main]
+  mainBranch -->|"rebase Server Split onto updated main"| split[cursor/server-split-f103]
+  split -->|"local test, then PR into org repo"| orgMain[organization main]
+```
+
+| Rule | Detail |
+|------|--------|
+| **Work branch** | `cursor/server-split-f103` only |
+| **Leave `dev` alone** | No commits, rebases, or PRs into/from `dev` for this migration |
+| **Gate before Phase 0 code** | Wait until `dev` (API v1, device SSO, etc.) is merged into `main`, then rebase/merge `cursor/server-split-f103` onto that updated `main` |
+| **Until that gate** | Docs/plan updates on Server Split are fine; do **not** start Phase 0+ implementation on stale `main` |
+| **Landing** | After local testing on Server Split, open a PR into the organization-level repository / `main` |
 
 ---
 
@@ -25,6 +46,7 @@ Future agents and sessions should treat decisions marked **LOCKED** as settled u
 | D8 | Web auth: JSON login/register issuing **httpOnly session cookie** (same-origin SPA). Android keeps **Bearer API key** + device SSO | **LOCKED** |
 | D9 | Breaking API changes → new version (`/api/v2`); v1 stays additive | **LOCKED** |
 | D10 | OpenAPI (`openapi.yaml`) lives in **this** repo as the machine-readable contract | **LOCKED** |
+| D11 | All migration work happens on **`cursor/server-split-f103`**; **`dev` is off-limits** for this effort | **LOCKED** |
 
 ### Explicit non-goals
 
@@ -329,14 +351,17 @@ When `GOTODO_MODE=api`, HTML/SPA routes are not registered.
 
 Any agent picking this up should:
 
-1. Read **this file** end-to-end and note which phase is in progress (nearest unchecked box).
-2. Use **`origin/dev`** (or newer default branch once merged) as implementation baseline — not stale `main` unless synced.
-3. Prefer small PRs that check boxes in **one phase** only; update checkboxes in the same PR.
-4. Not re-open **LOCKED** decisions; if blocked, record an “Open question” under §10 and stop.
-5. Not add new HTMX surfaces after Phase A starts — new capabilities go to `/api/v1` (+ SPA in B/C).
-6. Keep Android changes out of this repo unless updating OpenAPI/docs/min-version notes.
+1. Check out **`cursor/server-split-f103`** (create/track from origin if needed). Never commit migration work to `dev` or directly to `main`.
+2. Read **this file** end-to-end and note which phase is in progress (nearest unchecked box).
+3. **Before Phase 0+ code:** confirm `main` already contains the former `dev` API work (v1, device SSO, etc.). If not, only update docs/plan on Server Split and stop — do not implement against stale `main`, and do not merge `dev` yourself unless the maintainer asks.
+4. After `main` is caught up: `git fetch origin && git rebase origin/main` (or merge) onto Server Split, then continue.
+5. Prefer small commits/PRs that check boxes in **one phase** only; update checkboxes in the same change.
+6. Not re-open **LOCKED** decisions; if blocked, record an “Open question” under §10 and stop.
+7. Not add new HTMX surfaces after Phase A starts — new capabilities go to `/api/v1` (+ SPA in B/C).
+8. Keep Android changes out of this repo unless updating OpenAPI/docs/min-version notes.
+9. Final delivery is a PR from Server Split into the **organization** repository after local testing — not drive-by merges into `dev`.
 
-### Suggested first implementation PR (when execution starts)
+### Suggested first implementation slice (when the main←dev gate is clear)
 
 **Phase 0 only:** config/template decoupling + `--mode=api` + bootstrap + `GET /api/v1/health`.
 
@@ -372,3 +397,4 @@ Resolve by editing this section; promote to §1 when decided.
 | Date | Change |
 |------|--------|
 | 2026-07-16 | Initial locked plan: server / SPA web / app; HTMX removal; phased API-first path |
+| 2026-07-16 | Working branch set to `cursor/server-split-f103`; leave `dev` alone until merged to `main` |
