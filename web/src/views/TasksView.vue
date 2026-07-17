@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
-import { RouterLink, useRoute, useRouter } from 'vue-router'
+import { RouterLink } from 'vue-router'
 import { api } from '@/api/client'
 import type { Project, SavedView, Tag, Task } from '@/api/types'
 import { APIError } from '@/api/types'
 import TaskTableRow from '@/components/TaskTableRow.vue'
 import { useAuth } from '@/composables/useAuth'
+import { useInfiniteScroll } from '@/composables/useInfiniteScroll'
+import { useTaskListFilters } from '@/composables/useTaskListFilters'
 import { useTaskSidebar } from '@/composables/useTaskSidebar'
 import { useTaskSortable } from '@/composables/useTaskSortable'
 import { useToast } from '@/composables/useToast'
@@ -17,122 +19,61 @@ const projects = ref<Project[]>([])
 const tags = ref<Tag[]>([])
 const savedViews = ref<SavedView[]>([])
 const total = ref(0)
-const page = ref(1)
+const loadedPage = ref(0)
 const totalPages = ref(1)
 const completedCount = ref(0)
 const incompleteCount = ref(0)
 const search = ref('')
 const loading = ref(true)
+const loadingMore = ref(false)
 const toast = useToast()
 const { user } = useAuth()
+const {
+  filters,
+  hasActiveFilters,
+  toApiParams,
+  toExportQuery,
+  setFilter,
+  clearFilters: resetFilters,
+  applySavedView: applySavedViewFilters,
+} = useTaskListFilters()
 const undoToken = ref<string | null>(null)
 const selected = ref<number[]>([])
 const bulkProjectId = ref('')
 const bulkTagId = ref('')
 const bulkPriority = ref('0')
 const bulkDueDate = ref('')
-const route = useRoute()
-const router = useRouter()
 const favoriteListEl = ref<HTMLElement | null>(null)
 const taskListEl = ref<HTMLElement | null>(null)
-
-const filterKeys = ['status', 'due', 'completed', 'priority', 'tag', 'sort', 'project', 'search'] as const
-
-const filterParams = computed(() => {
-  const q = route.query
-  const params: Record<string, string | number | undefined> = {
-    per_page: user.value?.items_per_page || 50,
-  }
-  for (const key of filterKeys) {
-    const v = q[key]
-    if (typeof v === 'string' && v) params[key] = v
-  }
-  const pageParam = q.page
-  if (typeof pageParam === 'string' && pageParam) {
-    const p = parseInt(pageParam, 10)
-    if (p > 0) params.page = p
-  }
-  return params
-})
-
-const currentStatus = computed(() =>
-  typeof route.query.status === 'string' ? route.query.status : '',
-)
-const currentDue = computed(() => (typeof route.query.due === 'string' ? route.query.due : ''))
-const currentSort = computed(() => (typeof route.query.sort === 'string' ? route.query.sort : ''))
-const currentProject = computed(() =>
-  typeof route.query.project === 'string' ? route.query.project : '',
-)
-const currentPriority = computed(() =>
-  typeof route.query.priority === 'string' ? route.query.priority : '',
-)
-const currentTag = computed(() => (typeof route.query.tag === 'string' ? route.query.tag : ''))
+const loadMoreSentinel = ref<HTMLElement | null>(null)
 
 const favoriteTasks = computed(() => tasks.value.filter((t) => t.favorite))
 const regularTasks = computed(() => tasks.value.filter((t) => !t.favorite))
 const allSelected = computed(
   () => tasks.value.length > 0 && selected.value.length === tasks.value.length,
 )
-const hasActiveFilters = computed(() =>
-  filterKeys.some((k) => {
-    const v = route.query[k]
-    return typeof v === 'string' && v !== ''
-  }),
-)
-const isSearching = computed(
-  () => typeof route.query.search === 'string' && route.query.search !== '',
-)
+const isSearching = computed(() => filters.search !== '')
 const showTaskTable = computed(
   () => total.value > 0 || favoriteTasks.value.length > 0 || hasActiveFilters.value,
 )
-
-const exportFilterQuery = computed(() => {
-  const params = new URLSearchParams()
-  for (const key of filterKeys) {
-    const v = route.query[key]
-    if (typeof v === 'string' && v) params.set(key, v)
-  }
-  const s = params.toString()
-  return s ? `&${s}` : ''
-})
-
-const paginationWindow = computed(() => {
-  const current = page.value
-  const last = totalPages.value
-  const windowSize = 4
-  const start = current >= windowSize ? current : 1
-  const end = Math.min(start + windowSize - 1, last)
-  const pages: number[] = []
-  for (let i = start; i <= end; i++) pages.push(i)
-  return { pages, hasRightEllipsis: end < last }
-})
-
-const sortableEnabled = computed(() => currentSort.value !== 'priority' && !loading.value)
-const showFavoriteList = computed(() => page.value === 1 && favoriteTasks.value.length > 0)
-
-function currentPageParam(): number {
-  const q = route.query.page
-  if (typeof q === 'string' && q) {
-    const p = parseInt(q, 10)
-    if (p > 0) return p
-  }
-  return page.value > 0 ? page.value : 1
-}
+const hasMore = computed(() => loadedPage.value < totalPages.value)
+const sortableEnabled = computed(() => filters.sort !== 'priority' && !loading.value)
+const showFavoriteList = computed(() => favoriteTasks.value.length > 0)
 
 function taskMatchesCurrentFilters(task: Task): boolean {
   if (!taskMatchesStatusFilter(task)) return false
-  if (currentProject.value === '0' && task.project_id != null) return false
-  if (currentProject.value && currentProject.value !== '0') {
-    const pid = parseInt(currentProject.value, 10)
+  if (filters.project === '0' && task.project_id != null) return false
+  if (filters.project && filters.project !== '0') {
+    const pid = parseInt(filters.project, 10)
     if (!Number.isNaN(pid) && task.project_id !== pid) return false
   }
-  if (currentPriority.value && String(task.priority) !== currentPriority.value) return false
-  if (currentTag.value) {
-    const tagId = parseInt(currentTag.value, 10)
+  if (filters.priority && String(task.priority) !== filters.priority) return false
+  if (filters.tag) {
+    const tagId = parseInt(filters.tag, 10)
     if (!task.tags?.some((t) => t.id === tagId)) return false
   }
-  if (isSearching.value) {
-    const q = (route.query.search as string).toLowerCase()
+  if (filters.search) {
+    const q = filters.search.toLowerCase()
     const hay = `${task.title} ${task.description}`.toLowerCase()
     if (!hay.includes(q)) return false
   }
@@ -143,8 +84,7 @@ function registerTaskAdded(task: Task) {
   total.value += 1
   if (task.completed) completedCount.value += 1
   else incompleteCount.value += 1
-  if (!taskMatchesCurrentFilters(task) || currentPageParam() !== 1) return
-  if (tasks.value.some((t) => t.id === task.id)) return
+  if (!taskMatchesCurrentFilters(task) || tasks.value.some((t) => t.id === task.id)) return
   if (task.favorite) {
     tasks.value = [task, ...tasks.value]
   } else {
@@ -162,8 +102,8 @@ function removeTaskLocally(task: Task) {
 }
 
 function taskMatchesStatusFilter(task: Task) {
-  if (currentStatus.value === 'complete') return task.completed
-  if (currentStatus.value === 'incomplete') return !task.completed
+  if (filters.status === 'complete') return task.completed
+  if (filters.status === 'incomplete') return !task.completed
   return true
 }
 
@@ -217,11 +157,11 @@ async function saveReorder(orderedIds: number[], favorite: boolean) {
     await api.reorderTasks({
       task_ids: orderedIds,
       favorite,
-      project: currentProject.value || undefined,
+      project: filters.project || undefined,
     })
   } catch (err) {
     toast.push(err instanceof APIError ? err.message : 'Could not save task order', 'error')
-    await reloadCurrentPage()
+    await reloadInitial()
   }
 }
 
@@ -248,21 +188,20 @@ async function loadMeta() {
   }
 }
 
-async function load(opts?: { silent?: boolean }) {
-  if (!opts?.silent) {
-    loading.value = true
-    selected.value = []
-  }
+async function reloadInitial() {
+  loading.value = true
+  loadedPage.value = 0
+  selected.value = []
   try {
-    const params = { ...filterParams.value, page: currentPageParam() }
-    const list = await api.listTasks(params)
+    const perPage = user.value?.items_per_page || 50
+    const list = await api.listTasks(toApiParams(1, perPage))
     tasks.value = list.tasks
+    loadedPage.value = 1
     total.value = list.total
-    page.value = currentPageParam()
     totalPages.value = list.total_pages
     completedCount.value = list.completed_count
     incompleteCount.value = list.incomplete_count
-    search.value = typeof route.query.search === 'string' ? route.query.search : ''
+    search.value = filters.search
   } catch (err) {
     toast.push(err instanceof APIError ? err.message : 'Failed to load tasks', 'error')
   } finally {
@@ -272,13 +211,18 @@ async function load(opts?: { silent?: boolean }) {
   }
 }
 
-async function reloadCurrentPage() {
-  const params = { ...filterParams.value, page: currentPageParam() }
+async function loadMore() {
+  if (loadingMore.value || loading.value || !hasMore.value) return
+  loadingMore.value = true
   try {
-    const list = await api.listTasks(params)
-    tasks.value = list.tasks
+    const perPage = user.value?.items_per_page || 50
+    const nextPage = loadedPage.value + 1
+    const list = await api.listTasks(toApiParams(nextPage, perPage))
+    const existingIds = new Set(tasks.value.map((t) => t.id))
+    const newTasks = list.tasks.filter((t) => !existingIds.has(t.id))
+    tasks.value = [...tasks.value, ...newTasks]
+    loadedPage.value = nextPage
     total.value = list.total
-    page.value = currentPageParam()
     totalPages.value = list.total_pages
     completedCount.value = list.completed_count
     incompleteCount.value = list.incomplete_count
@@ -286,6 +230,8 @@ async function reloadCurrentPage() {
     refreshSortable()
   } catch (err) {
     toast.push(err instanceof APIError ? err.message : 'Failed to load tasks', 'error')
+  } finally {
+    loadingMore.value = false
   }
 }
 
@@ -342,7 +288,7 @@ async function undoDelete() {
     await api.undo(undoToken.value)
     undoToken.value = null
     toast.push('Restored', 'success')
-    await reloadCurrentPage()
+    await reloadInitial()
   } catch (err) {
     toast.push(err instanceof APIError ? err.message : 'Undo failed', 'error')
   }
@@ -381,7 +327,7 @@ async function bulk(action: string, extra: Record<string, unknown> = {}) {
         applyTaskUpdate({ ...task, completed: action === 'complete' })
       }
     } else {
-      await reloadCurrentPage()
+      await reloadInitial()
     }
     selected.value = []
   } catch (err) {
@@ -426,71 +372,42 @@ function bulkDuePreset(preset: string) {
   if (due) void bulk('set_due_date', { due_date: due })
 }
 
-function pushQuery(query: Record<string, string | undefined>) {
-  void router.push({ name: 'tasks', query })
+function setFilterAndReload(key: Parameters<typeof setFilter>[0], value: string) {
+  setFilter(key, value)
+  void reloadInitial()
 }
 
 function applySearch() {
-  const query: Record<string, string | undefined> = {}
-  for (const key of [...filterKeys, 'page'] as const) {
-    const v = route.query[key]
-    if (typeof v === 'string' && v) query[key] = v
-  }
-  if (search.value.trim()) query.search = search.value.trim()
-  else delete query.search
-  delete query.page
-  pushQuery(query)
-}
-
-function setFilter(key: string, value: string) {
-  const query: Record<string, string | undefined> = {}
-  for (const k of [...filterKeys, 'page'] as const) {
-    const v = route.query[k]
-    if (typeof v === 'string' && v) query[k] = v
-  }
-  if (value) query[key] = value
-  else delete query[key]
-  delete query.page
-  pushQuery(query)
-}
-
-function setPage(p: number) {
-  const query: Record<string, string | undefined> = {}
-  for (const k of filterKeys) {
-    const v = route.query[k]
-    if (typeof v === 'string' && v) query[k] = v
-  }
-  if (p > 1) query.page = String(p)
-  pushQuery(query)
+  setFilter('search', search.value.trim())
+  void reloadInitial()
 }
 
 function clearFilters() {
-  pushQuery({})
+  search.value = ''
+  resetFilters()
+  void reloadInitial()
 }
 
 function toggleSort() {
-  setFilter('sort', currentSort.value === 'priority' ? '' : 'priority')
+  setFilter('sort', filters.sort === 'priority' ? '' : 'priority')
+  void reloadInitial()
 }
 
 function cycleStatusColumnFilter() {
-  if (!currentStatus.value) setFilter('status', 'incomplete')
-  else if (currentStatus.value === 'incomplete') setFilter('status', 'complete')
-  else setFilter('status', '')
+  if (!filters.status) setFilterAndReload('status', 'incomplete')
+  else if (filters.status === 'incomplete') setFilterAndReload('status', 'complete')
+  else setFilterAndReload('status', '')
 }
 
 function applySavedView(view: SavedView) {
-  const f = view.filter || {}
-  const query: Record<string, string | undefined> = {}
-  for (const key of filterKeys) {
-    const v = f[key as keyof typeof f]
-    if (typeof v === 'string' && v) query[key] = v
-  }
-  pushQuery(query)
+  applySavedViewFilters(view.filter || {})
+  search.value = filters.search
+  void reloadInitial()
 }
 
 async function exportTasks(format: 'json' | 'csv', filtered: boolean) {
   try {
-    const suffix = filtered ? exportFilterQuery.value : ''
+    const suffix = filtered ? toExportQuery() : ''
     const path = `/api/v1/export?format=${format}${suffix}`
     const res = await fetch(path, { credentials: 'include' })
     if (!res.ok) throw new Error('Export failed')
@@ -509,16 +426,11 @@ async function exportTasks(format: 'json' | 'csv', filtered: boolean) {
   }
 }
 
-watch(
-  () => route.query,
-  () => {
-    void load()
-  },
-)
+useInfiniteScroll(loadMoreSentinel, loadMore, hasMore)
 
 onMounted(async () => {
   await loadMeta()
-  await load()
+  await reloadInitial()
 })
 </script>
 
@@ -613,9 +525,9 @@ onMounted(async () => {
           id="project-filter"
           class="form-select w-auto"
           style="width: 220px"
-          :value="currentProject"
+          :value="filters.project"
           aria-label="Filter by project"
-          @change="setFilter('project', ($event.target as HTMLSelectElement).value)"
+          @change="setFilterAndReload('project', ($event.target as HTMLSelectElement).value)"
         >
           <option value="">All projects</option>
           <option value="0">No project</option>
@@ -668,8 +580,8 @@ onMounted(async () => {
           id="status-filter-select"
           class="form-select form-select-sm w-auto"
           aria-label="Filter by status"
-          :value="currentStatus"
-          @change="setFilter('status', ($event.target as HTMLSelectElement).value)"
+          :value="filters.status"
+          @change="setFilterAndReload('status', ($event.target as HTMLSelectElement).value)"
         >
           <option value="">All statuses</option>
           <option value="incomplete">Incomplete</option>
@@ -680,8 +592,8 @@ onMounted(async () => {
           id="tag-filter-toolbar"
           class="form-select form-select-sm w-auto"
           aria-label="Filter by tag"
-          :value="currentTag"
-          @change="setFilter('tag', ($event.target as HTMLSelectElement).value)"
+          :value="filters.tag"
+          @change="setFilterAndReload('tag', ($event.target as HTMLSelectElement).value)"
         >
           <option value="">All tags</option>
           <option v-for="tag in tags" :key="tag.id" :value="String(tag.id)">{{ tag.name }}</option>
@@ -698,9 +610,9 @@ onMounted(async () => {
             :key="opt.key || 'all'"
             type="button"
             class="btn btn-outline-secondary due-filter-btn"
-            :class="{ 'due-filter-active': currentDue === opt.key }"
-            :aria-pressed="currentDue === opt.key"
-            @click="setFilter('due', opt.key)"
+            :class="{ 'due-filter-active': filters.due === opt.key }"
+            :aria-pressed="filters.due === opt.key"
+            @click="setFilterAndReload('due', opt.key)"
           >
             {{ opt.label }}
           </button>
@@ -709,8 +621,8 @@ onMounted(async () => {
           id="priority-filter-toolbar"
           class="form-select form-select-sm w-auto"
           aria-label="Filter by priority"
-          :value="currentPriority"
-          @change="setFilter('priority', ($event.target as HTMLSelectElement).value)"
+          :value="filters.priority"
+          @change="setFilterAndReload('priority', ($event.target as HTMLSelectElement).value)"
         >
           <option value="">All priorities</option>
           <option value="1">Low</option>
@@ -720,17 +632,17 @@ onMounted(async () => {
         <button
           type="button"
           class="btn btn-sm"
-          :class="currentSort === 'priority' ? 'btn-primary' : 'btn-outline-primary'"
+          :class="filters.sort === 'priority' ? 'btn-primary' : 'btn-outline-primary'"
           id="sort-priority-btn"
-          :aria-pressed="currentSort === 'priority'"
+          :aria-pressed="filters.sort === 'priority'"
           :title="
-            currentSort === 'priority'
+            filters.sort === 'priority'
               ? 'Sorted by priority (high first). Click to restore manual drag order.'
               : 'Sorted by manual order. Click to sort by priority (high first).'
           "
           @click="toggleSort"
         >
-          {{ currentSort === 'priority' ? 'Sort: Priority' : 'Sort: Manual' }}
+          {{ filters.sort === 'priority' ? 'Sort: Priority' : 'Sort: Manual' }}
         </button>
       </div>
     </div>
@@ -844,18 +756,18 @@ onMounted(async () => {
                     Status
                     <span class="status-filter-state">
                       ({{
-                        currentStatus === 'incomplete'
+                        filters.status === 'incomplete'
                           ? 'Incomplete'
-                          : currentStatus === 'complete'
+                          : filters.status === 'complete'
                             ? 'Complete'
                             : 'All'
                       }})
                     </span>
                     <i
                       :class="
-                        currentStatus === 'incomplete'
+                        filters.status === 'incomplete'
                           ? 'bi bi-arrow-right-short'
-                          : currentStatus === 'complete'
+                          : filters.status === 'complete'
                             ? 'bi bi-x-circle'
                             : 'bi bi-funnel'
                       "
@@ -906,56 +818,14 @@ onMounted(async () => {
                   </div>
                 </td>
               </tr>
+              <tr v-if="hasMore" ref="loadMoreSentinel">
+                <td colspan="7" class="text-center py-3 text-muted">
+                  <span v-if="loadingMore" class="spinner-border spinner-border-sm me-2" role="status" />
+                  {{ loadingMore ? 'Loading more tasks…' : 'Scroll for more tasks' }}
+                </td>
+              </tr>
             </tbody>
           </table>
-        </div>
-
-        <div v-if="total > 0" class="d-flex justify-content-center align-items-center">
-          <div class="d-flex align-items-center gap-2">
-            <button
-              class="btn btn-outline-primary btn-sm"
-              type="button"
-              title="Go to first page"
-              aria-label="Go to first page"
-              :disabled="page <= 1"
-              @click="setPage(1)"
-            >
-              &laquo;
-            </button>
-            <button
-              v-for="p in paginationWindow.pages"
-              :key="p"
-              class="btn btn-sm"
-              :class="p === page ? 'btn-primary' : 'btn-outline-primary'"
-              type="button"
-              :aria-current="p === page ? 'page' : undefined"
-              :disabled="p === page"
-              @click="setPage(p)"
-            >
-              {{ p }}
-            </button>
-            <span v-if="paginationWindow.hasRightEllipsis" class="text-muted">&hellip;</span>
-            <button
-              v-if="paginationWindow.hasRightEllipsis"
-              class="btn btn-outline-primary btn-sm"
-              type="button"
-              title="Go to last page"
-              aria-label="Go to last page"
-              @click="setPage(totalPages)"
-            >
-              {{ totalPages }}
-            </button>
-            <button
-              class="btn btn-outline-primary btn-sm"
-              type="button"
-              title="Go to last page"
-              aria-label="Go to last page"
-              :disabled="page >= totalPages"
-              @click="setPage(totalPages)"
-            >
-              &raquo;
-            </button>
-          </div>
         </div>
       </div>
     </div>

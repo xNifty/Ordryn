@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { api } from '@/api/client'
 import type { SavedView } from '@/api/types'
 import { APIError } from '@/api/types'
+import { useTaskListFilters } from '@/composables/useTaskListFilters'
 import { useToast } from '@/composables/useToast'
 
 const views = ref<SavedView[]>([])
@@ -13,6 +14,7 @@ const due = ref('')
 const search = ref('')
 const toast = useToast()
 const router = useRouter()
+const { applySavedView } = useTaskListFilters()
 
 async function load() {
   try {
@@ -43,11 +45,8 @@ async function create() {
 }
 
 async function apply(view: SavedView) {
-  const q: Record<string, string> = {}
-  for (const [k, v] of Object.entries(view.filter || {})) {
-    if (v) q[k] = String(v)
-  }
-  await router.push({ name: 'tasks', query: q })
+  applySavedView(view.filter || {})
+  await router.push({ name: 'tasks' })
 }
 
 async function remove(view: SavedView) {
