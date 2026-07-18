@@ -6,7 +6,7 @@ info:
     `GOTODO_MODE=api` (API only). Redis is required for `/api/v1` authentication and rate limiting.
 
     Auth: session cookie (SPA login/register) or `Authorization: Bearer <api_key>`.
-  version: 0.18.1-beta
+  version: 1.0.0
   license:
     name: See LICENSE in repository
 
