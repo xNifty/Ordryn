@@ -1,39 +1,32 @@
 # GoTodo Migration: Server / Web SPA / App
 
-**Status:** Locked direction (planning)  
+**Status:** Phases 0–D product path **complete on `dev`** (API-only mode, domain writes, OpenAPI, Vue SPA at `/app/`, HTMX removed). Cleanup and Phase E remain.  
 **Owner:** maintainers  
-**Working branch:** `cursor/server-split-f103` (“Server Split”) — **all migration work lands here**  
-**Do not touch:** `dev` (no further commits to `dev` for this effort)  
-**Baseline on branch:** former `dev` API v1 / device SSO merged into Server Split for implementation  
+**Landed on:** `dev` (via Server Split / HTMX-removal PRs)  
+**Still open (deferred):** `handlers` → `internal/api` rename, `cmd/gotodo` entry, fold `internal/tasks` into `domain`, Phase E Android alignment, optional multi-repo extract  
 **Also see:**
 - [`DEPLOYMENT_OPTIONS.md`](./DEPLOYMENT_OPTIONS.md) — one binary; `full` vs `api`; optional clients
 - [`LOCAL_TESTING.md`](./LOCAL_TESTING.md) — get a testable local stack now
 - [`REPO_SPLIT.md`](./REPO_SPLIT.md) — logical ownership + optional future extracts  
+- [`README.md`](../README.md) — run full / Vite-dev / API-only
 
-**Last updated:** 2026-07-16
+**Last updated:** 2026-07-18
 
-This document is the durable source of truth for the architecture migration.  
-Future agents and sessions should treat decisions marked **LOCKED** as settled unless a maintainer explicitly revises this file.
+This document remains the durable record of locked decisions and phase history.  
+Section checkboxes below are a historical checklist; prefer the **Status** block above for current state.  
+Treat decisions marked **LOCKED** as settled unless a maintainer explicitly revises this file.
 
 **Product model reminder:** Ordryn stays **one self-hostable binary**. “Server / web / app” is a *logical* split (API vs SPA vs Android). Separate git repos are optional later — not required for local testing or for users who only want the API.
 
 ---
 
-## 0. Branch workflow (read first)
+## 0. Branch workflow (historical)
 
-```mermaid
-flowchart LR
-  devBranch[dev] -->|"maintainer merges first"| mainBranch[main]
-  mainBranch -->|"rebase Server Split onto updated main"| split[cursor/server-split-f103]
-  split -->|"local test, then PR into org repo"| orgMain[organization main]
-```
+Phases 0–D were implemented on feature branches (e.g. `cursor/server-split-f103`, HTMX-removal branches) and **merged into `dev`**. New work continues from `dev` (or short-lived feature branches) unless a maintainer says otherwise.
 
 | Rule | Detail |
 |------|--------|
-| **Work branch** | `cursor/server-split-f103` only |
-| **Leave `dev` alone** | No commits, rebases, or PRs into/from `dev` for this migration |
-| **Baseline** | API v1 work from `dev` is on Server Split; do not commit back to `dev` |
-| **Landing** | After local testing on Server Split, open a PR into the organization-level repository / `main` |
+| **Current base** | `dev` (Server Split + SPA cutover landed) |
 | **Local test** | Follow [`LOCAL_TESTING.md`](./LOCAL_TESTING.md) — Ordryn alone is enough; no sibling repos required |
 | **New repos** | Optional later; inventory in [`REPO_SPLIT.md`](./REPO_SPLIT.md) |
 
@@ -53,7 +46,7 @@ flowchart LR
 | D8 | Web auth: JSON login/register issuing **httpOnly session cookie** (same-origin SPA). Android keeps **Bearer API key** + device SSO | **LOCKED** |
 | D9 | Breaking API changes → new version (`/api/v2`); v1 stays additive | **LOCKED** |
 | D10 | OpenAPI (`openapi.yaml`) lives in **this** repo as the machine-readable contract | **LOCKED** |
-| D11 | All migration work happens on **`cursor/server-split-f103`**; **`dev` is off-limits** for this effort | **LOCKED** |
+| D11 | Original rule: work on **`cursor/server-split-f103`** only — **superseded** once phases 0–D merged to **`dev`** | **SUPERSEDED** |
 
 ### Explicit non-goals
 
@@ -361,17 +354,16 @@ When `GOTODO_MODE=api`, HTML/SPA routes are not registered.
 
 Any agent picking this up should:
 
-1. Check out **`cursor/server-split-f103`** (create/track from origin if needed). Never commit migration work to `dev` or directly to `main`.
-2. Read **this file** end-to-end and note which phase is in progress (nearest unchecked box).
-3. Prefer small commits that check boxes in **one phase** only; update checkboxes in the same change. Update [`REPO_SPLIT.md`](./REPO_SPLIT.md) when package ownership moves.
+1. Work from **`dev`** (or a short-lived feature branch off `dev`). Phases 0–D already landed.
+2. Read **this file** (especially the Status block) and [`README.md`](../README.md) for run modes.
+3. Prefer small commits for remaining cleanup (package renames, P3 endpoints, Phase E docs). Update [`REPO_SPLIT.md`](./REPO_SPLIT.md) when package ownership moves.
 4. Not re-open **LOCKED** decisions; if blocked, record an “Open question” under §10 and stop.
-5. Not add new HTMX surfaces after Phase A starts — new capabilities go to `/api/v1` (+ SPA in B/C).
+5. Do not reintroduce HTMX — capabilities go to `/api/v1` + the Vue SPA.
 6. Keep Android changes out of this repo unless updating OpenAPI/docs/min-version notes.
-7. Final delivery is a PR from Server Split into the **organization** repository after local testing — not drive-by merges into `dev`.
 
 ### Next implementation slice
 
-**Phase C remainder:** SPA multipart import (+ optional password-reset JSON). Then **Phase D** HTMX removal.
+**Deferred cleanup:** collapse `handlers` → `internal/api`, optional `cmd/gotodo`, fold `internal/tasks` into `domain`, remaining P3 rows. **Phase E:** Android alignment against OpenAPI.
 
 ---
 
@@ -393,10 +385,10 @@ Resolve by editing this section; promote to §1 when decided.
 
 - [x] `GOTODO_MODE=api` is a supported, documented deploy mode
 - [x] SPA is the default web UI
-- [ ] HTMX, Go HTML templates for app UI, and fragment handlers are gone
-- [ ] Android and SPA share OpenAPI `/api/v1`
-- [ ] Register + bootstrap paths work without a pre-existing frontend
-- [ ] This document’s phases 0–D are fully checked
+- [x] HTMX, Go HTML templates for app UI, and fragment handlers are gone
+- [ ] Android and SPA share OpenAPI `/api/v1` (Phase E; SPA already uses OpenAPI)
+- [x] Register + bootstrap paths work without a pre-existing frontend
+- [x] Phases 0–D product path complete on `dev` (deferred: `internal/api` rename, `cmd/gotodo`)
 
 ---
 
@@ -416,3 +408,4 @@ Resolve by editing this section; promote to §1 when decided.
 | 2026-07-16 | D7 revised: SPA stack is **Vue 3 + TypeScript + Vite** (was React) |
 | 2026-07-16 | Phase B: Vue SPA under `web/`, served at `/app/`, `GOTODO_UI` flag |
 | 2026-07-16 | Phase C: SPA parity surfaces + default `GOTODO_UI=spa`; P2 v1 admin/invites/dashboard/calendar/export |
+| 2026-07-18 | Status: phases 0–D landed on `dev`; HTMX gone; D11 superseded; next slice = deferred cleanup + Phase E |

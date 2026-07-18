@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import { api } from '@/api/client'
 import type { Invite } from '@/api/types'
 import { APIError } from '@/api/types'
@@ -7,6 +7,7 @@ import { useToast } from '@/composables/useToast'
 
 const invites = ref<Invite[]>([])
 const email = ref('')
+const revealed = ref<Record<number, boolean>>({})
 const toast = useToast()
 
 async function load() {
@@ -30,6 +31,7 @@ async function create() {
 }
 
 async function remove(inv: Invite) {
+  if (!confirm(`Delete invite for ${inv.email}?`)) return
   try {
     await api.deleteInvite(inv.id)
     toast.push('Invite deleted', 'info')
@@ -37,6 +39,10 @@ async function remove(inv: Invite) {
   } catch (err) {
     toast.push(err instanceof APIError ? err.message : 'Delete failed', 'error')
   }
+}
+
+function toggleToken(id: number) {
+  revealed.value = { ...revealed.value, [id]: !revealed.value[id] }
 }
 
 async function copyToken(inv: Invite) {
@@ -48,42 +54,102 @@ async function copyToken(inv: Invite) {
   }
 }
 
-onMounted(load)
+onMounted(() => {
+  document.body.classList.add('create-invite-page')
+  void load()
+})
+
+onUnmounted(() => {
+  document.body.classList.remove('create-invite-page')
+})
 </script>
 
 <template>
-  <section class="page">
-    <header class="page-head">
-      <div>
-        <h1>Invites</h1>
-        <p class="lede">Create registration tokens when invite-only mode is on.</p>
+  <div class="container mt-3">
+    <div class="card">
+      <div class="card-body">
+        <h1 class="card-title">Create Invite</h1>
+
+        <form id="create-invite-form" @submit.prevent="create">
+          <div class="mb-3">
+            <label for="email" class="form-label">Email</label>
+            <input
+              id="email"
+              v-model="email"
+              type="email"
+              class="form-control"
+              name="email"
+              required
+              placeholder="user@example.com"
+            />
+          </div>
+          <button type="submit" class="btn btn-primary">
+            <i class="bi bi-plus-lg" /> Create Invite
+          </button>
+        </form>
       </div>
-    </header>
+    </div>
 
-    <form class="composer" @submit.prevent="create">
-      <input v-model="email" type="email" placeholder="invitee@example.com" required />
-      <button class="primary" type="submit">Create invite</button>
-    </form>
-
-    <ul class="plain-list">
-      <li v-for="inv in invites" :key="inv.id" class="row">
-        <div class="task-body">
-          <strong>{{ inv.email }}</strong>
-          <p class="meta muted">
-            {{ inv.used ? 'Used' : 'Unused' }} · {{ inv.token }}
-          </p>
+    <div class="card mt-4 invite-list-card">
+      <div class="card-body">
+        <h2 class="card-title">Existing Invites</h2>
+        <div class="table-responsive">
+          <table class="table table-striped">
+            <thead>
+              <tr>
+                <th>Email</th>
+                <th>Token</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="inv in invites" :key="inv.id" :id="`invite-row-${inv.id}`">
+                <td class="title-column" data-label="Email">{{ inv.email }}</td>
+                <td class="desc-column" data-label="Token">
+                  <code class="token-masked">{{ revealed[inv.id] ? inv.token : '••••••••' }}</code>
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-link p-0 ms-1 reveal-token-btn"
+                    :aria-label="revealed[inv.id] ? 'Hide invite token' : 'Show invite token'"
+                    @click="toggleToken(inv.id)"
+                  >
+                    {{ revealed[inv.id] ? 'Hide' : 'Show' }}
+                  </button>
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-link p-0 ms-1"
+                    aria-label="Copy invite token"
+                    @click="copyToken(inv)"
+                  >
+                    Copy
+                  </button>
+                </td>
+                <td class="status-column" data-label="Status">
+                  <span v-if="inv.used" class="badge bg-success">Active</span>
+                  <span v-else class="badge bg-warning">Pending</span>
+                </td>
+                <td class="delete-column" data-label="Actions">
+                  <button
+                    v-if="!inv.used"
+                    class="btn btn-sm btn-danger"
+                    type="button"
+                    title="Delete invite"
+                    :aria-label="`Delete invite ${inv.id}`"
+                    @click="remove(inv)"
+                  >
+                    <i class="bi bi-trash" />
+                  </button>
+                  <span v-else class="text-muted">—</span>
+                </td>
+              </tr>
+              <tr v-if="!invites.length">
+                <td colspan="4" class="text-muted">No invites yet.</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
-        <button type="button" class="ghost" @click="copyToken(inv)">Copy</button>
-        <button
-          v-if="!inv.used"
-          type="button"
-          class="ghost danger"
-          @click="remove(inv)"
-        >
-          Delete
-        </button>
-      </li>
-      <li v-if="!invites.length" class="muted empty">No invites yet.</li>
-    </ul>
-  </section>
+      </div>
+    </div>
+  </div>
 </template>

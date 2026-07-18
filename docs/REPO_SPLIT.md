@@ -1,6 +1,6 @@
 # Code ownership: server vs web vs Android
 
-**Status:** Active during Server Split (`cursor/server-split-f103`)  
+**Status:** Phases 0–D landed on `dev` (Vue SPA + API); optional multi-repo extract still open  
 **Companions:** [`DEPLOYMENT_OPTIONS.md`](./DEPLOYMENT_OPTIONS.md) · [`LOCAL_TESTING.md`](./LOCAL_TESTING.md) · [`MIGRATION_SERVER_WEB_SPA.md`](./MIGRATION_SERVER_WEB_SPA.md)
 
 ---
@@ -30,7 +30,7 @@ See [`DEPLOYMENT_OPTIONS.md`](./DEPLOYMENT_OPTIONS.md).
 
 ```text
 Ordryn binary
- ├─ full → HTMX UI (today) + /api/v1
+ ├─ full → Vue SPA at /app/ + /api/v1
  └─ api  → /api/v1 only
 ```
 
@@ -42,8 +42,8 @@ Ordryn binary
 |------|------|----------------------|------------------------|
 | Domain / DB | `internal/domain`, `internal/storage`, `internal/tasks` | Yes | Yes |
 | JSON API | `internal/server` `/api/v1`, bootstrap, digest | Yes | Yes |
-| Legacy web | `templates/`, `public/`, HTMX `/api/*` | No (not registered) | Yes |
-| Future SPA source | `web/` (Phase B) | Optional static embed | Yes when built |
+| Static (favicon) | `internal/server/public/favicon.svg` | No | Yes |
+| Vue SPA | `web/` → `web/dist` at `/app/` | No | Yes when built |
 | Docs | `docs/*` | n/a | n/a |
 
 ---
@@ -56,7 +56,7 @@ Create these only when you have a reason (separate release cadence, different co
 
 Keep as the canonical server. Same as today.
 
-### gotodo-web (after Phase B SPA exists)
+### gotodo-web (optional extract of existing SPA)
 
 | Include | Exclude |
 |---------|---------|
@@ -102,3 +102,4 @@ Self-hosters can still use Ordryn `full` mode serving `web/dist` without cloning
 |------|--------|
 | 2026-07-16 | Initial inventory |
 | 2026-07-16 | Clarified: one product + deploy modes; multi-repo optional |
+| 2026-07-18 | HTMX removed; full mode serves Vue SPA at `/app/`; status reflects land on `dev` |
