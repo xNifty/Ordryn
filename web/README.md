@@ -55,7 +55,7 @@ location /gotodo/ {
 }
 ```
 
-Browser: `/gotodo/…` · Go receives: `/…` · SPA still knows the public prefix via `<meta name="gotodo-base">`.
+Browser: `/gotodo/…` · Go receives: `/…` · SPA still knows the public prefix via `<meta name="gotodo-base">` and `<base href>` (needed so nested routes like `/auth/device` load `./assets` correctly).
 
 ## Surfaces
 
