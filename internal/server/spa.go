@@ -129,8 +129,14 @@ func serveSPAIndex(w http.ResponseWriter, r *http.Request) {
 	if base != "" {
 		injectBase = base + "/"
 	}
-	// Meta tag (not an inline script) so CSP script-src nonce policy stays intact.
-	inject := fmt.Sprintf(`<meta name="gotodo-base" content="%s">`, htmlAttrEscape(injectBase))
+	escaped := htmlAttrEscape(injectBase)
+	// Meta for JS pathPrefix; <base> so Vite relative ./assets resolve under nested
+	// routes like /auth/device (otherwise ./assets → /auth/assets and the SPA
+	// catch-all returns HTML instead of JS).
+	inject := fmt.Sprintf(
+		`<meta name="gotodo-base" content="%s"><base href="%s">`,
+		escaped, escaped,
+	)
 	html := string(raw)
 	if strings.Contains(html, "<head>") {
 		html = strings.Replace(html, "<head>", "<head>"+inject, 1)

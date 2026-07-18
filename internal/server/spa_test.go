@@ -95,6 +95,9 @@ func TestServeSPAFallbackToIndex(t *testing.T) {
 	if !strings.Contains(body, `name="gotodo-base" content="/gotodo/"`) {
 		t.Fatalf("missing base inject in %q", body)
 	}
+	if !strings.Contains(body, `<base href="/gotodo/">`) {
+		t.Fatalf("missing <base href> inject in %q", body)
+	}
 
 	req = httptest.NewRequest(http.MethodGet, "/gotodo/assets/app.js", nil)
 	rec = httptest.NewRecorder()
