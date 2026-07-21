@@ -22,6 +22,11 @@ const router = createRouter({
       component: () => import('@/views/ApiDocsView.vue'),
     },
     {
+      path: '/s/:token',
+      name: 'share',
+      component: () => import('@/views/ShareView.vue'),
+    },
+    {
       path: '/login',
       name: 'login',
       component: () => import('@/views/LoginView.vue'),
@@ -114,6 +119,11 @@ const router = createRouter({
       name: 'invites',
       component: () => import('@/views/InvitesView.vue'),
       meta: { requiresAuth: true, permission: 'createinvites' },
+    },
+    {
+      path: '/:pathMatch(.*)*',
+      name: 'not-found',
+      component: () => import('@/views/NotFoundView.vue'),
     },
   ],
 })

@@ -7,6 +7,7 @@ export type User = {
   permissions: string[]
   digest_enabled: boolean
   digest_hour: number
+  allow_project_invites: boolean
 }
 
 export type Tag = {
@@ -18,6 +19,65 @@ export type Tag = {
 export type Project = {
   id: number
   name: string
+  role?: 'owner' | 'editor' | 'viewer'
+  owner_email?: string
+  owner_user_id?: number
+}
+
+export type ProjectMember = {
+  user_id: number
+  email: string
+  user_name: string
+  role: 'owner' | 'editor' | 'viewer'
+  created_at: string
+}
+
+export type ProjectInvite = {
+  id: number
+  project_id: number
+  email: string
+  role: 'editor' | 'viewer'
+  expires_at: string
+  created_at: string
+  project_name?: string
+  inviter_email?: string
+}
+
+export type ProjectEvent = {
+  id: number
+  project_id: number
+  actor_user_id: number
+  actor_email?: string
+  event_type: string
+  source: 'project' | 'task'
+  task_id?: number
+  label: string
+  metadata?: Record<string, unknown>
+  created_at: string
+}
+
+export type ShareLink = {
+  id: number
+  token: string
+  url: string
+  scope_type: 'project' | 'tag'
+  scope_id: number
+  expires_at?: string | null
+  created_at: string
+}
+
+export type ShareLinkView = {
+  scope_type: string
+  scope_id: number
+  tasks: Array<{
+    id: number
+    title: string
+    completed: boolean
+    due_date: string
+    priority: number
+    project?: string
+    tags?: Tag[]
+  }>
 }
 
 export type Task = {

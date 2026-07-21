@@ -3,17 +3,20 @@ import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'
 import { useToast } from '@/composables/useToast'
+import { useConfirm } from '@/composables/useConfirm'
 import { api } from '@/api/client'
 import type { APIKey, CalendarInfo, Tag } from '@/api/types'
 import { APIError } from '@/api/types'
 
 const { user, updateProfile } = useAuth()
 const { push } = useToast()
+const { askConfirm } = useConfirm()
 const userName = ref('')
 const timezone = ref('UTC')
 const itemsPerPage = ref(15)
 const digestEnabled = ref(false)
 const digestHour = ref(8)
+const allowProjectInvites = ref(true)
 const busy = ref(false)
 
 const currentPassword = ref('')
@@ -40,6 +43,7 @@ watch(
     itemsPerPage.value = u.items_per_page || 15
     digestEnabled.value = u.digest_enabled
     digestHour.value = u.digest_hour
+    allowProjectInvites.value = u.allow_project_invites !== false
   },
   { immediate: true },
 )
@@ -64,6 +68,7 @@ async function save() {
       items_per_page: Number(itemsPerPage.value),
       digest_enabled: digestEnabled.value,
       digest_hour: Number(digestHour.value),
+      allow_project_invites: allowProjectInvites.value,
     })
     push('Profile updated', 'success')
   } catch (err) {
@@ -119,6 +124,13 @@ async function saveRenameTag() {
 }
 
 async function removeTag(tag: Tag) {
+  const ok = await askConfirm({
+    title: 'Delete tag?',
+    message: `Delete tag “${tag.name}”? It will be removed from all tasks.`,
+    confirmLabel: 'Delete',
+    danger: true,
+  })
+  if (!ok) return
   try {
     await api.deleteTag(tag.id)
     tags.value = await api.listTags()
@@ -129,6 +141,13 @@ async function removeTag(tag: Tag) {
 }
 
 async function regenerateCalendar() {
+  const ok = await askConfirm({
+    title: 'Regenerate calendar link?',
+    message: 'This invalidates the current calendar feed URL. Anyone using the old link will lose access.',
+    confirmLabel: 'Regenerate',
+    danger: true,
+  })
+  if (!ok) return
   try {
     calendar.value = await api.regenerateCalendar()
     push('Calendar token regenerated', 'success')
@@ -176,6 +195,13 @@ async function createKey() {
 }
 
 async function revokeKey(key: APIKey) {
+  const ok = await askConfirm({
+    title: 'Revoke API key?',
+    message: `Revoke API key “${key.name}”? Apps using it will stop working.`,
+    confirmLabel: 'Revoke',
+    danger: true,
+  })
+  if (!ok) return
   try {
     await api.revokeAPIKey(key.id)
     keys.value = await api.listAPIKeys()
@@ -231,6 +257,20 @@ onUnmounted(() => {
           <div class="mb-3">
             <label for="profile-digest-hour" class="form-label">Digest hour (0–23)</label>
             <input id="profile-digest-hour" v-model.number="digestHour" type="number" class="form-control" min="0" max="23" />
+          </div>
+          <div class="form-check mb-3">
+            <input
+              id="profile-allow-invites"
+              v-model="allowProjectInvites"
+              class="form-check-input"
+              type="checkbox"
+            />
+            <label class="form-check-label" for="profile-allow-invites">
+              Allow project invites
+            </label>
+            <div class="form-text">
+              When off, other users cannot invite you to shared projects. Existing memberships are unchanged.
+            </div>
           </div>
           <button type="submit" class="btn btn-primary" :disabled="busy">
             {{ busy ? 'Saving…' : 'Save profile' }}

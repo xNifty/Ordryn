@@ -208,9 +208,14 @@ func SetTaskTags(taskID, userID int, tagIDs []int) error {
 	if err := pool.QueryRow(context.Background(), "SELECT user_id FROM tasks WHERE id = $1", taskID).Scan(&ownerID); err != nil {
 		return fmt.Errorf("task not found")
 	}
-	if ownerID != userID {
+	canRead, writeRole, _, accessErr := CanUserAccessTask(taskID, userID)
+	if accessErr != nil {
+		return accessErr
+	}
+	if !canRead || !RoleCanWrite(writeRole) {
 		return fmt.Errorf("not authorized")
 	}
+	_ = ownerID
 
 	for _, tagID := range tagIDs {
 		var exists bool

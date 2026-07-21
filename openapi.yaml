@@ -751,9 +751,24 @@ paths:
   /api/v1/projects/{id}:
     parameters:
       - $ref: "#/components/parameters/ID"
+    get:
+      tags: [Projects]
+      summary: Get a project (owned or shared)
+      security:
+        - SessionCookie: []
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "404":
+          $ref: "#/components/responses/NotFound"
     patch:
       tags: [Projects]
-      summary: Rename a project
+      summary: Rename a project (owner only)
       security:
         - SessionCookie: []
         - BearerAuth: []
@@ -770,17 +785,310 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Project"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
     delete:
       tags: [Projects]
-      summary: Delete a project
+      summary: Delete a project (owner only)
       security:
         - SessionCookie: []
         - BearerAuth: []
       responses:
         "204":
           description: Deleted
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/projects/{id}/members:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    get:
+      tags: [Projects]
+      summary: List project members
+      security:
+        - SessionCookie: []
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Members
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProjectMember"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/projects/{id}/members/{userId}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: integer
+    patch:
+      tags: [Projects]
+      summary: Update member role (owner only)
+      security:
+        - SessionCookie: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RoleBody"
+      responses:
+        "204":
+          description: Updated
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Projects]
+      summary: Remove member or leave project
+      security:
+        - SessionCookie: []
+        - BearerAuth: []
+      responses:
+        "204":
+          description: Removed
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/projects/{id}/invites:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    get:
+      tags: [Projects]
+      summary: List pending project invites (owner only)
+      security:
+        - SessionCookie: []
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Invites
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProjectInvite"
+    post:
+      tags: [Projects]
+      summary: Invite a user by email (owner only)
+      security:
+        - SessionCookie: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectInviteCreate"
+      responses:
+        "200":
+          description: Privacy-preserving acknowledgment (does not reveal whether the email exists or an invite was created)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message]
+                properties:
+                  message:
+                    type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/v1/projects/{id}/invites/{inviteId}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+      - name: inviteId
+        in: path
+        required: true
+        schema:
+          type: integer
+    delete:
+      tags: [Projects]
+      summary: Revoke a pending invite (owner only)
+      security:
+        - SessionCookie: []
+        - BearerAuth: []
+      responses:
+        "204":
+          description: Revoked
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/projects/{id}/events:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    get:
+      tags: [Projects]
+      summary: Project activity feed
+      security:
+        - SessionCookie: []
+        - BearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            maximum: 200
+      responses:
+        "200":
+          description: Events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProjectEvent"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/project-invites:
+    get:
+      tags: [Projects]
+      summary: List pending invites for the current user
+      security:
+        - SessionCookie: []
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Pending invites
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProjectInvite"
+
+  /api/v1/project-invites/{id}/accept:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    post:
+      tags: [Projects]
+      summary: Accept a project invite
+      security:
+        - SessionCookie: []
+        - BearerAuth: []
+      responses:
+        "204":
+          description: Accepted
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/project-invites/{id}/decline:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    post:
+      tags: [Projects]
+      summary: Decline a project invite
+      security:
+        - SessionCookie: []
+        - BearerAuth: []
+      responses:
+        "204":
+          description: Declined
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/share-links:
+    get:
+      tags: [Projects]
+      summary: List share links for a scope
+      security:
+        - SessionCookie: []
+        - BearerAuth: []
+      parameters:
+        - name: scope_type
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [project, tag]
+        - name: scope_id
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Share links
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ShareLink"
+    post:
+      tags: [Projects]
+      summary: Create a read-only share link
+      security:
+        - SessionCookie: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShareLinkCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShareLink"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/v1/share-links/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    delete:
+      tags: [Projects]
+      summary: Revoke a share link
+      security:
+        - SessionCookie: []
+        - BearerAuth: []
+      responses:
+        "204":
+          description: Revoked
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/share-links/view/{token}:
+    parameters:
+      - name: token
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Projects]
+      summary: Public read-only task list for a share link
+      responses:
+        "200":
+          description: Shared tasks
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShareLinkView"
         "404":
           $ref: "#/components/responses/NotFound"
 
@@ -1340,6 +1648,12 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
+    Forbidden:
+      description: Insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
     NotFound:
       description: Resource not found
       content:
@@ -1427,6 +1741,9 @@ components:
           type: integer
           minimum: 0
           maximum: 23
+        allow_project_invites:
+          type: boolean
+          description: When false, the user cannot be invited to shared projects
 
     UserPatch:
       type: object
@@ -1444,6 +1761,8 @@ components:
           type: integer
           minimum: 0
           maximum: 23
+        allow_project_invites:
+          type: boolean
 
     RegisterRequest:
       type: object
@@ -1526,6 +1845,162 @@ components:
           type: integer
         name:
           type: string
+        role:
+          type: string
+          enum: [owner, editor, viewer]
+        owner_email:
+          type: string
+        owner_user_id:
+          type: integer
+
+    ProjectMember:
+      type: object
+      properties:
+        user_id:
+          type: integer
+        email:
+          type: string
+        user_name:
+          type: string
+        role:
+          type: string
+          enum: [owner, editor, viewer]
+        created_at:
+          type: string
+          format: date-time
+
+    ProjectInvite:
+      type: object
+      properties:
+        id:
+          type: integer
+        project_id:
+          type: integer
+        email:
+          type: string
+        role:
+          type: string
+          enum: [editor, viewer]
+        expires_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        project_name:
+          type: string
+        inviter_email:
+          type: string
+
+    ProjectInviteCreate:
+      type: object
+      required: [email, role]
+      properties:
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [editor, viewer]
+
+    RoleBody:
+      type: object
+      required: [role]
+      properties:
+        role:
+          type: string
+          enum: [editor, viewer]
+
+    ProjectEvent:
+      type: object
+      properties:
+        id:
+          type: integer
+        project_id:
+          type: integer
+        actor_user_id:
+          type: integer
+        actor_email:
+          type: string
+        event_type:
+          type: string
+        source:
+          type: string
+          enum: [project, task]
+        task_id:
+          type: integer
+        label:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+
+    ShareLink:
+      type: object
+      properties:
+        id:
+          type: integer
+        token:
+          type: string
+        url:
+          type: string
+        scope_type:
+          type: string
+          enum: [project, tag]
+        scope_id:
+          type: integer
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    ShareLinkCreate:
+      type: object
+      required: [scope_type, scope_id]
+      properties:
+        scope_type:
+          type: string
+          enum: [project, tag]
+        scope_id:
+          type: integer
+        expires_at:
+          type: string
+          format: date-time
+
+    ShareLinkView:
+      type: object
+      properties:
+        scope_type:
+          type: string
+        scope_id:
+          type: integer
+        tasks:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              title:
+                type: string
+              completed:
+                type: boolean
+              due_date:
+                type: string
+              priority:
+                type: integer
+              project:
+                type: string
+              tags:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Tag"
 
     NameBody:
       type: object

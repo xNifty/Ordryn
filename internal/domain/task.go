@@ -89,7 +89,10 @@ func CreateTask(ctx context.Context, userID int, in CreateTaskInput) (int, error
 			projectArg = nil
 			useProjectCol = false
 		} else {
-			if _, err := storage.GetProjectByID(*in.ProjectID, userID); err != nil {
+			if err := RequireProjectWriteAccess(*in.ProjectID, userID); err != nil {
+				if err == ErrForbidden {
+					return 0, ErrForbidden
+				}
 				return 0, fmt.Errorf("%w: invalid project_id", ErrValidation)
 			}
 			projectArg = *in.ProjectID
@@ -152,9 +155,14 @@ func UpdateTask(ctx context.Context, userID, taskID int, in UpdateTaskInput) (*U
 		}
 		return nil, err
 	}
-	if ownerID != userID {
+	canRead, writeRole, _, accessErr := storage.CanUserAccessTask(taskID, userID)
+	if accessErr != nil {
+		return nil, accessErr
+	}
+	if !canRead || !storage.RoleCanWrite(writeRole) {
 		return nil, ErrNotFound
 	}
+	_ = ownerID
 
 	var title, description, dueDate string
 	var completed, favorite bool
@@ -210,7 +218,10 @@ func UpdateTask(ctx context.Context, userID, taskID int, in UpdateTaskInput) (*U
 		if *in.ProjectID == nil || **in.ProjectID == 0 {
 			newProjectID = sql.NullInt64{Valid: false}
 		} else {
-			if _, err := storage.GetProjectByID(**in.ProjectID, userID); err != nil {
+			if err := RequireProjectWriteAccess(**in.ProjectID, userID); err != nil {
+				if err == ErrForbidden {
+					return nil, ErrForbidden
+				}
 				return nil, fmt.Errorf("%w: invalid project_id", ErrValidation)
 			}
 			newProjectID = sql.NullInt64{Int64: int64(**in.ProjectID), Valid: true}
@@ -253,7 +264,7 @@ func UpdateTask(ctx context.Context, userID, taskID int, in UpdateTaskInput) (*U
 	return result, nil
 }
 
-// DeleteTask removes an owned task. Returns ErrNotFound if missing.
+// DeleteTask removes a task the user can write. Returns ErrNotFound if missing.
 func DeleteTask(ctx context.Context, userID, taskID int) error {
 	pool, err := storage.OpenDatabase()
 	if err != nil {
@@ -261,8 +272,16 @@ func DeleteTask(ctx context.Context, userID, taskID int) error {
 	}
 	defer storage.CloseDatabase(pool)
 
+	canRead, writeRole, _, accessErr := storage.CanUserAccessTask(taskID, userID)
+	if accessErr != nil {
+		return accessErr
+	}
+	if !canRead || !storage.RoleCanWrite(writeRole) {
+		return ErrNotFound
+	}
+
 	_ = storage.LogTaskEvent(taskID, userID, "deleted", nil)
-	tag, err := pool.Exec(ctx, `DELETE FROM tasks WHERE id = $1 AND user_id = $2`, taskID, userID)
+	tag, err := pool.Exec(ctx, `DELETE FROM tasks WHERE id = $1`, taskID)
 	if err != nil {
 		return err
 	}
@@ -280,9 +299,17 @@ func SetTaskCompleted(ctx context.Context, userID, taskID int, completed bool) e
 	}
 	defer storage.CloseDatabase(pool)
 
+	canRead, writeRole, _, accessErr := storage.CanUserAccessTask(taskID, userID)
+	if accessErr != nil {
+		return accessErr
+	}
+	if !canRead || !storage.RoleCanWrite(writeRole) {
+		return ErrNotFound
+	}
+
 	tag, err := pool.Exec(ctx,
 		`UPDATE tasks SET completed = $1, date_modified = NOW() AT TIME ZONE 'UTC'
-		 WHERE id = $2 AND user_id = $3`, completed, taskID, userID)
+		 WHERE id = $2`, completed, taskID)
 	if err != nil {
 		return err
 	}
@@ -297,7 +324,7 @@ func SetTaskCompleted(ctx context.Context, userID, taskID int, completed bool) e
 	return nil
 }
 
-// ToggleTaskCompleted flips completed for an owned task.
+// ToggleTaskCompleted flips completed for a writable task.
 func ToggleTaskCompleted(ctx context.Context, userID, taskID int) (bool, error) {
 	pool, err := storage.OpenDatabase()
 	if err != nil {
@@ -305,17 +332,21 @@ func ToggleTaskCompleted(ctx context.Context, userID, taskID int) (bool, error) 
 	}
 	defer storage.CloseDatabase(pool)
 
+	canRead, writeRole, _, accessErr := storage.CanUserAccessTask(taskID, userID)
+	if accessErr != nil {
+		return false, accessErr
+	}
+	if !canRead || !storage.RoleCanWrite(writeRole) {
+		return false, ErrNotFound
+	}
+
 	var completed bool
-	var ownerID int
-	err = pool.QueryRow(ctx, `SELECT completed, user_id FROM tasks WHERE id = $1`, taskID).Scan(&completed, &ownerID)
+	err = pool.QueryRow(ctx, `SELECT completed FROM tasks WHERE id = $1`, taskID).Scan(&completed)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) || errors.Is(err, sql.ErrNoRows) {
 			return false, ErrNotFound
 		}
 		return false, err
-	}
-	if ownerID != userID {
-		return false, ErrNotFound
 	}
 	newVal := !completed
 	if err := SetTaskCompleted(ctx, userID, taskID, newVal); err != nil {
@@ -324,7 +355,7 @@ func ToggleTaskCompleted(ctx context.Context, userID, taskID int) (bool, error) 
 	return newVal, nil
 }
 
-// SetTaskFavorite sets is_favorite for an owned task.
+// SetTaskFavorite sets is_favorite for a writable task.
 func SetTaskFavorite(ctx context.Context, userID, taskID int, favorite bool) error {
 	pool, err := storage.OpenDatabase()
 	if err != nil {
@@ -332,9 +363,17 @@ func SetTaskFavorite(ctx context.Context, userID, taskID int, favorite bool) err
 	}
 	defer storage.CloseDatabase(pool)
 
+	canRead, writeRole, _, accessErr := storage.CanUserAccessTask(taskID, userID)
+	if accessErr != nil {
+		return accessErr
+	}
+	if !canRead || !storage.RoleCanWrite(writeRole) {
+		return ErrNotFound
+	}
+
 	tag, err := pool.Exec(ctx,
 		`UPDATE tasks SET is_favorite = $1, date_modified = NOW() AT TIME ZONE 'UTC'
-		 WHERE id = $2 AND user_id = $3`, favorite, taskID, userID)
+		 WHERE id = $2`, favorite, taskID)
 	if err != nil {
 		return err
 	}
@@ -344,7 +383,7 @@ func SetTaskFavorite(ctx context.Context, userID, taskID int, favorite bool) err
 	return nil
 }
 
-// ToggleTaskFavorite flips is_favorite for an owned task.
+// ToggleTaskFavorite flips is_favorite for a writable task.
 func ToggleTaskFavorite(ctx context.Context, userID, taskID int) (bool, error) {
 	pool, err := storage.OpenDatabase()
 	if err != nil {
@@ -352,10 +391,18 @@ func ToggleTaskFavorite(ctx context.Context, userID, taskID int) (bool, error) {
 	}
 	defer storage.CloseDatabase(pool)
 
+	canRead, writeRole, _, accessErr := storage.CanUserAccessTask(taskID, userID)
+	if accessErr != nil {
+		return false, accessErr
+	}
+	if !canRead || !storage.RoleCanWrite(writeRole) {
+		return false, ErrNotFound
+	}
+
 	var isFav bool
 	err = pool.QueryRow(ctx,
-		`SELECT COALESCE(is_favorite,false) FROM tasks WHERE id = $1 AND user_id = $2`,
-		taskID, userID).Scan(&isFav)
+		`SELECT COALESCE(is_favorite,false) FROM tasks WHERE id = $1`,
+		taskID).Scan(&isFav)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) || errors.Is(err, sql.ErrNoRows) {
 			return false, ErrNotFound

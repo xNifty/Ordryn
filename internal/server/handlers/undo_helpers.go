@@ -83,14 +83,15 @@ func snapshotTasksForUndo(ctx context.Context, db *pgxpool.Pool, ids []int, user
 			SELECT id, title, COALESCE(description, ''), COALESCE(completed, false),
 			       COALESCE(is_favorite, false), COALESCE(priority, 0), COALESCE(position, 0),
 			       project_id, COALESCE(CAST(due_date AS TEXT), '')
-			FROM tasks WHERE id = $1 AND user_id = $2`,
-			id, userID).Scan(
+			FROM tasks WHERE id = $1`,
+			id).Scan(
 			&snap.ID, &snap.Title, &snap.Description, &snap.Completed, &snap.IsFavorite,
 			&snap.Priority, &snap.Position, &projectID, &dueDate,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("task not found")
 		}
+		_ = userID
 		if projectID.Valid {
 			pid := int(projectID.Int64)
 			snap.ProjectID = &pid

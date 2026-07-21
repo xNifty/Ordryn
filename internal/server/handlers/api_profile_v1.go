@@ -13,11 +13,12 @@ import (
 )
 
 type apiMePatchRequest struct {
-	UserName      *string `json:"user_name"`
-	Timezone      *string `json:"timezone"`
-	ItemsPerPage  *int    `json:"items_per_page"`
-	DigestEnabled *bool   `json:"digest_enabled"`
-	DigestHour    *int    `json:"digest_hour"`
+	UserName            *string `json:"user_name"`
+	Timezone            *string `json:"timezone"`
+	ItemsPerPage        *int    `json:"items_per_page"`
+	DigestEnabled       *bool   `json:"digest_enabled"`
+	DigestHour          *int    `json:"digest_hour"`
+	AllowProjectInvites *bool   `json:"allow_project_invites"`
 }
 
 type apiChangePasswordRequest struct {
@@ -72,11 +73,12 @@ func apiV1PatchMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	in := domain.UpdateProfileInput{
-		UserName:      current.UserName,
-		Timezone:      current.Timezone,
-		ItemsPerPage:  current.ItemsPerPage,
-		DigestEnabled: current.DigestEnabled,
-		DigestHour:    current.DigestHour,
+		UserName:            current.UserName,
+		Timezone:            current.Timezone,
+		ItemsPerPage:        current.ItemsPerPage,
+		DigestEnabled:       current.DigestEnabled,
+		DigestHour:          current.DigestHour,
+		AllowProjectInvites: current.AllowProjectInvites,
 	}
 	if req.UserName != nil {
 		in.UserName = *req.UserName
@@ -92,6 +94,9 @@ func apiV1PatchMe(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.DigestHour != nil {
 		in.DigestHour = *req.DigestHour
+	}
+	if req.AllowProjectInvites != nil {
+		in.AllowProjectInvites = *req.AllowProjectInvites
 	}
 
 	profile, err := domain.UpdateProfile(r.Context(), userID, in, utils.IsValidTimezone(in.Timezone), utils.ValidItemsPerPage(in.ItemsPerPage))

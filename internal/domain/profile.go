@@ -12,11 +12,12 @@ import (
 
 // UpdateProfileInput is the shared profile update payload.
 type UpdateProfileInput struct {
-	UserName      string
-	Timezone      string
-	ItemsPerPage  int
-	DigestEnabled bool
-	DigestHour    int
+	UserName            string
+	Timezone            string
+	ItemsPerPage        int
+	DigestEnabled       bool
+	DigestHour          int
+	AllowProjectInvites bool
 }
 
 // UpdateProfile validates and persists profile fields. timezoneOK should come from utils.IsValidTimezone.
@@ -39,7 +40,7 @@ func UpdateProfile(ctx context.Context, userID int, in UpdateProfileInput, timez
 	if in.DigestHour < 0 || in.DigestHour > 23 {
 		return nil, fmt.Errorf("%w: digest_hour must be between 0 and 23", ErrValidation)
 	}
-	if err := storage.UpdateUserProfileByID(userID, in.UserName, in.Timezone, in.ItemsPerPage, in.DigestEnabled, in.DigestHour); err != nil {
+	if err := storage.UpdateUserProfileByID(userID, in.UserName, in.Timezone, in.ItemsPerPage, in.DigestEnabled, in.DigestHour, in.AllowProjectInvites); err != nil {
 		return nil, err
 	}
 	return storage.GetUserProfileByID(userID)

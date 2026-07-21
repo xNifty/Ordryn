@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"sort"
 
@@ -55,37 +56,46 @@ func ReorderTasks(ctx context.Context, userID int, ids []int, isFav bool, projec
 	defer storage.CloseDatabase(pool)
 
 	for _, id := range ids {
-		var exists bool
-		projectCond := ""
-		args := []interface{}{id, userID, isFav}
-		if projectFilter != nil {
-			if *projectFilter == 0 {
-				projectCond = " AND project_id IS NULL"
-			} else {
-				projectCond = " AND project_id = $4"
-				args = append(args, *projectFilter)
-			}
+		canRead, writeRole, _, accessErr := storage.CanUserAccessTask(id, userID)
+		if accessErr != nil {
+			return accessErr
 		}
-		query := "SELECT EXISTS(SELECT 1 FROM tasks WHERE id = $1 AND user_id = $2 AND COALESCE(is_favorite,false) = $3" + projectCond + ")"
-		if err := pool.QueryRow(ctx, query, args...).Scan(&exists); err != nil {
+		if !canRead || !storage.RoleCanWrite(writeRole) {
+			return fmt.Errorf("%w: task %d does not belong to user or mismatched favorite group/project", ErrValidation, id)
+		}
+		var isFavorite bool
+		var proj sql.NullInt64
+		err := pool.QueryRow(ctx,
+			`SELECT COALESCE(is_favorite,false), project_id FROM tasks WHERE id = $1`, id).Scan(&isFavorite, &proj)
+		if err != nil {
 			return err
 		}
-		if !exists {
+		if isFavorite != isFav {
 			return fmt.Errorf("%w: task %d does not belong to user or mismatched favorite group/project", ErrValidation, id)
+		}
+		if projectFilter != nil {
+			if *projectFilter == 0 {
+				if proj.Valid {
+					return fmt.Errorf("%w: task %d does not belong to user or mismatched favorite group/project", ErrValidation, id)
+				}
+			} else if !proj.Valid || int(proj.Int64) != *projectFilter {
+				return fmt.Errorf("%w: task %d does not belong to user or mismatched favorite group/project", ErrValidation, id)
+			}
 		}
 	}
 
+	vis := storage.TaskVisibleCondition("t", "$1")
 	argsAll := []interface{}{userID, isFav}
-	q := "SELECT id FROM tasks WHERE user_id = $1 AND COALESCE(is_favorite,false) = $2"
+	q := "SELECT t.id FROM tasks t WHERE " + vis + " AND COALESCE(t.is_favorite,false) = $2"
 	if projectFilter != nil {
 		if *projectFilter == 0 {
-			q += " AND project_id IS NULL"
+			q += " AND t.project_id IS NULL"
 		} else {
-			q += " AND project_id = $3"
+			q += " AND t.project_id = $3"
 			argsAll = append(argsAll, *projectFilter)
 		}
 	}
-	q += " ORDER BY position ASC, id ASC"
+	q += " ORDER BY t.position ASC, t.id ASC"
 
 	rowsAll, err := pool.Query(ctx, q, argsAll...)
 	if err != nil {
@@ -121,7 +131,7 @@ func ReorderTasks(ctx context.Context, userID int, ids []int, isFav bool, projec
 
 	for idx, id := range allIDs {
 		pos := idx + 1
-		if _, err := tx.Exec(ctx, "UPDATE tasks SET position = $1 WHERE id = $2 AND user_id = $3", pos, id, userID); err != nil {
+		if _, err := tx.Exec(ctx, "UPDATE tasks SET position = $1 WHERE id = $2", pos, id); err != nil {
 			return err
 		}
 	}

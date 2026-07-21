@@ -49,6 +49,13 @@ func TestMain(m *testing.M) {
 			UNIQUE (user_id, name)
 		);
 		CREATE TABLE projects (id SERIAL PRIMARY KEY, user_id INT, name TEXT);
+		CREATE TABLE project_members (
+			project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+			user_id INTEGER NOT NULL,
+			role VARCHAR(16) NOT NULL,
+			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			PRIMARY KEY (project_id, user_id)
+		);
 		CREATE TABLE tags (
 			id SERIAL PRIMARY KEY,
 			user_id INTEGER NOT NULL,

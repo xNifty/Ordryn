@@ -7,4 +7,6 @@ var (
 	ErrNotFound = errors.New("not found")
 	// ErrValidation indicates invalid input.
 	ErrValidation = errors.New("validation")
+	// ErrForbidden indicates the user lacks permission for the action.
+	ErrForbidden = errors.New("forbidden")
 )

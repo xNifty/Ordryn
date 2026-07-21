@@ -11,6 +11,7 @@ import { useTaskListFilters } from '@/composables/useTaskListFilters'
 import { useTaskSidebar } from '@/composables/useTaskSidebar'
 import { useTaskSortable } from '@/composables/useTaskSortable'
 import { useToast } from '@/composables/useToast'
+import { useConfirm } from '@/composables/useConfirm'
 
 const { openAdd, openEdit, lastSavedTask } = useTaskSidebar()
 
@@ -27,6 +28,7 @@ const search = ref('')
 const loading = ref(true)
 const loadingMore = ref(false)
 const toast = useToast()
+const { askConfirm } = useConfirm()
 const { user } = useAuth()
 const {
   filters,
@@ -269,7 +271,13 @@ async function toggleFavorite(task: Task) {
 }
 
 async function removeTask(task: Task) {
-  if (!confirm(`Delete "${task.title}"?`)) return
+  const ok = await askConfirm({
+    title: 'Delete task?',
+    message: `Delete “${task.title}”?`,
+    confirmLabel: 'Delete',
+    danger: true,
+  })
+  if (!ok) return
   try {
     const res = await api.deleteTask(task.id)
     undoToken.value = res.undo_token || null
@@ -308,6 +316,15 @@ function toggleSelectAll(checked: boolean) {
 
 async function bulk(action: string, extra: Record<string, unknown> = {}) {
   if (!selected.value.length) return
+  if (action === 'delete') {
+    const ok = await askConfirm({
+      title: 'Delete tasks?',
+      message: `Delete ${selected.value.length} selected task${selected.value.length === 1 ? '' : 's'}?`,
+      confirmLabel: 'Delete',
+      danger: true,
+    })
+    if (!ok) return
+  }
   const affectedIds = [...selected.value]
   try {
     const res = await api.bulkTasks({ action, task_ids: affectedIds, ...extra })
