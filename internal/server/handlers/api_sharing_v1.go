@@ -22,15 +22,16 @@ type apiProjectMemberJSON struct {
 }
 
 type apiProjectInviteJSON struct {
-	ID           int    `json:"id"`
-	ProjectID    int    `json:"project_id"`
-	Email        string `json:"email"`
-	UserName     string `json:"user_name,omitempty"`
-	Role         string `json:"role"`
-	ExpiresAt    string `json:"expires_at"`
-	CreatedAt    string `json:"created_at"`
-	ProjectName  string `json:"project_name,omitempty"`
-	InviterEmail string `json:"inviter_email,omitempty"`
+	ID              int    `json:"id"`
+	ProjectID       int    `json:"project_id"`
+	Email           string `json:"email"`
+	UserName        string `json:"user_name,omitempty"`
+	Role            string `json:"role"`
+	ExpiresAt       string `json:"expires_at"`
+	CreatedAt       string `json:"created_at"`
+	ProjectName     string `json:"project_name,omitempty"`
+	InviterEmail    string `json:"inviter_email,omitempty"`
+	InviterUserName string `json:"inviter_user_name,omitempty"`
 }
 
 type apiShareLinkJSON struct {
@@ -44,16 +45,17 @@ type apiShareLinkJSON struct {
 }
 
 type apiProjectEventJSON struct {
-	ID          int                    `json:"id"`
-	ProjectID   int                    `json:"project_id"`
-	ActorUserID int                    `json:"actor_user_id"`
-	ActorEmail  string                 `json:"actor_email,omitempty"`
-	EventType   string                 `json:"event_type"`
-	Source      string                 `json:"source"` // project | task
-	TaskID      *int                   `json:"task_id,omitempty"`
-	Label       string                 `json:"label"`
-	Metadata    map[string]interface{} `json:"metadata,omitempty"`
-	CreatedAt   string                 `json:"created_at"`
+	ID            int                    `json:"id"`
+	ProjectID     int                    `json:"project_id"`
+	ActorUserID   int                    `json:"actor_user_id"`
+	ActorEmail    string                 `json:"actor_email,omitempty"`
+	ActorUserName string                 `json:"actor_user_name,omitempty"`
+	EventType     string                 `json:"event_type"`
+	Source        string                 `json:"source"` // project | task
+	TaskID        *int                   `json:"task_id,omitempty"`
+	Label         string                 `json:"label"`
+	Metadata      map[string]interface{} `json:"metadata,omitempty"`
+	CreatedAt     string                 `json:"created_at"`
 }
 
 type apiInviteCreateRequest struct {
@@ -89,15 +91,16 @@ func shareLinkURL(r *http.Request, token string) string {
 
 func projectInviteToJSON(inv storage.ProjectInvite) apiProjectInviteJSON {
 	return apiProjectInviteJSON{
-		ID:           inv.ID,
-		ProjectID:    inv.ProjectID,
-		Email:        inv.Email,
-		UserName:     inv.UserName,
-		Role:         inv.Role,
-		ExpiresAt:    formatRFC3339(inv.ExpiresAt),
-		CreatedAt:    formatRFC3339(inv.CreatedAt),
-		ProjectName:  inv.ProjectName,
-		InviterEmail: inv.InviterEmail,
+		ID:              inv.ID,
+		ProjectID:       inv.ProjectID,
+		Email:           inv.Email,
+		UserName:        inv.UserName,
+		Role:            inv.Role,
+		ExpiresAt:       formatRFC3339(inv.ExpiresAt),
+		CreatedAt:       formatRFC3339(inv.CreatedAt),
+		ProjectName:     inv.ProjectName,
+		InviterEmail:    inv.InviterEmail,
+		InviterUserName: inv.InviterUserName,
 	}
 }
 
@@ -312,15 +315,16 @@ func apiV1ProjectEvents(w http.ResponseWriter, r *http.Request, projectID int) {
 	out := make([]apiProjectEventJSON, 0, len(projectEvents)+len(taskEvents))
 	for _, ev := range projectEvents {
 		out = append(out, apiProjectEventJSON{
-			ID:          ev.ID,
-			ProjectID:   ev.ProjectID,
-			ActorUserID: ev.ActorUserID,
-			ActorEmail:  ev.ActorEmail,
-			EventType:   ev.EventType,
-			Source:      "project",
-			Label:       formatProjectEventLabel(ev.EventType, ev.Metadata),
-			Metadata:    ev.Metadata,
-			CreatedAt:   formatRFC3339(ev.CreatedAt),
+			ID:            ev.ID,
+			ProjectID:     ev.ProjectID,
+			ActorUserID:   ev.ActorUserID,
+			ActorEmail:    ev.ActorEmail,
+			ActorUserName: ev.ActorUserName,
+			EventType:     ev.EventType,
+			Source:        "project",
+			Label:         formatProjectEventLabel(ev.EventType, ev.Metadata),
+			Metadata:      ev.Metadata,
+			CreatedAt:     formatRFC3339(ev.CreatedAt),
 		})
 	}
 	for _, ev := range taskEvents {
