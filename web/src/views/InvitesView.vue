@@ -4,11 +4,13 @@ import { api } from '@/api/client'
 import type { Invite } from '@/api/types'
 import { APIError } from '@/api/types'
 import { useToast } from '@/composables/useToast'
+import { useConfirm } from '@/composables/useConfirm'
 
 const invites = ref<Invite[]>([])
 const email = ref('')
 const revealed = ref<Record<number, boolean>>({})
 const toast = useToast()
+const { askConfirm } = useConfirm()
 
 async function load() {
   try {
@@ -31,7 +33,13 @@ async function create() {
 }
 
 async function remove(inv: Invite) {
-  if (!confirm(`Delete invite for ${inv.email}?`)) return
+  const ok = await askConfirm({
+    title: 'Delete invite?',
+    message: `Delete invite for ${inv.email}?`,
+    confirmLabel: 'Delete',
+    danger: true,
+  })
+  if (!ok) return
   try {
     await api.deleteInvite(inv.id)
     toast.push('Invite deleted', 'info')

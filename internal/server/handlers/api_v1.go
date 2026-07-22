@@ -82,8 +82,11 @@ type apiReorderOKResponse struct {
 }
 
 type apiProjectJSON struct {
-	ID   int    `json:"id"`
-	Name string `json:"name"`
+	ID          int    `json:"id"`
+	Name        string `json:"name"`
+	Role        string `json:"role,omitempty"`
+	OwnerEmail  string `json:"owner_email,omitempty"`
+	OwnerUserID int    `json:"owner_user_id,omitempty"`
 }
 
 type apiTagCreateRequest struct {
@@ -342,6 +345,10 @@ func apiV1CreateTask(w http.ResponseWriter, r *http.Request) {
 			utils.APIJSONError(w, http.StatusBadRequest, "invalid_request", err.Error())
 			return
 		}
+		if errors.Is(err, domain.ErrForbidden) {
+			utils.APIJSONError(w, http.StatusForbidden, "forbidden", "Forbidden.")
+			return
+		}
 		utils.APIJSONError(w, http.StatusInternalServerError, "internal_error", "Failed to create task.")
 		return
 	}
@@ -390,6 +397,10 @@ func apiV1PatchTask(w http.ResponseWriter, r *http.Request, taskID int) {
 		}
 		if errors.Is(err, domain.ErrValidation) {
 			utils.APIJSONError(w, http.StatusBadRequest, "invalid_request", err.Error())
+			return
+		}
+		if errors.Is(err, domain.ErrForbidden) {
+			utils.APIJSONError(w, http.StatusForbidden, "forbidden", "Forbidden.")
 			return
 		}
 		utils.APIJSONError(w, http.StatusInternalServerError, "internal_error", "Failed to update task.")
@@ -664,7 +675,7 @@ func apiV1ReorderTasks(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(apiReorderOKResponse{OK: true})
 }
 
-// APIV1ProjectsRouter handles /api/v1/projects and /api/v1/projects/{id}.
+// APIV1ProjectsRouter handles /api/v1/projects and /api/v1/projects/{id}[/members|invites|events].
 func APIV1ProjectsRouter(w http.ResponseWriter, r *http.Request) {
 	sub := utils.ParseAPIV1Subpath(r, "projects")
 	if sub == "" {
@@ -678,12 +689,17 @@ func APIV1ProjectsRouter(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	if handleProjectSubResource(w, r, sub) {
+		return
+	}
 	id, err := strconv.Atoi(sub)
 	if err != nil || id <= 0 {
 		utils.APIJSONError(w, http.StatusBadRequest, "invalid_request", "Invalid project id.")
 		return
 	}
 	switch r.Method {
+	case http.MethodGet:
+		apiV1GetProject(w, r, id)
 	case http.MethodPatch:
 		apiV1PatchProject(w, r, id)
 	case http.MethodDelete:
@@ -704,17 +720,44 @@ func apiV1ListProjects(w http.ResponseWriter, r *http.Request) {
 		utils.APIJSONError(w, http.StatusUnauthorized, "unauthorized", "Not authenticated.")
 		return
 	}
-	projects, err := storage.GetProjectsForUser(userID)
+	projects, err := storage.GetAccessibleProjects(userID)
 	if err != nil {
 		utils.APIJSONError(w, http.StatusInternalServerError, "internal_error", "Failed to list projects.")
 		return
 	}
 	out := make([]apiProjectJSON, 0, len(projects))
 	for _, p := range projects {
-		out = append(out, apiProjectJSON{ID: p.ID, Name: p.Name})
+		out = append(out, apiProjectJSON{
+			ID:          p.ID,
+			Name:        p.Name,
+			Role:        p.Role,
+			OwnerEmail:  p.OwnerEmail,
+			OwnerUserID: p.OwnerUserID,
+		})
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	json.NewEncoder(w).Encode(out)
+}
+
+func apiV1GetProject(w http.ResponseWriter, r *http.Request, projectID int) {
+	userID, ok := apiUserFromRequest(r)
+	if !ok {
+		utils.APIJSONError(w, http.StatusUnauthorized, "unauthorized", "Not authenticated.")
+		return
+	}
+	p, err := storage.GetAccessibleProjectByID(projectID, userID)
+	if err != nil {
+		utils.APIJSONError(w, http.StatusNotFound, "not_found", "Project not found.")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	json.NewEncoder(w).Encode(apiProjectJSON{
+		ID:          p.ID,
+		Name:        p.Name,
+		Role:        p.Role,
+		OwnerEmail:  p.OwnerEmail,
+		OwnerUserID: p.OwnerUserID,
+	})
 }
 
 func apiV1CreateProject(w http.ResponseWriter, r *http.Request) {
@@ -739,7 +782,12 @@ func apiV1CreateProject(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(apiProjectJSON{ID: project.ID, Name: project.Name})
+	json.NewEncoder(w).Encode(apiProjectJSON{
+		ID:          project.ID,
+		Name:        project.Name,
+		Role:        storage.RoleOwner,
+		OwnerUserID: userID,
+	})
 }
 
 func apiV1PatchProject(w http.ResponseWriter, r *http.Request, projectID int) {
@@ -759,6 +807,10 @@ func apiV1PatchProject(w http.ResponseWriter, r *http.Request, projectID int) {
 			utils.APIJSONError(w, http.StatusBadRequest, "invalid_request", err.Error())
 			return
 		}
+		if errors.Is(err, domain.ErrForbidden) {
+			utils.APIJSONError(w, http.StatusForbidden, "forbidden", "Only the owner can rename this project.")
+			return
+		}
 		if errors.Is(err, domain.ErrNotFound) {
 			utils.APIJSONError(w, http.StatusNotFound, "not_found", "Project not found.")
 			return
@@ -767,7 +819,7 @@ func apiV1PatchProject(w http.ResponseWriter, r *http.Request, projectID int) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	json.NewEncoder(w).Encode(apiProjectJSON{ID: project.ID, Name: project.Name})
+	json.NewEncoder(w).Encode(apiProjectJSON{ID: project.ID, Name: project.Name, Role: storage.RoleOwner, OwnerUserID: project.UserID})
 }
 
 func apiV1DeleteProject(w http.ResponseWriter, r *http.Request, projectID int) {
@@ -777,6 +829,10 @@ func apiV1DeleteProject(w http.ResponseWriter, r *http.Request, projectID int) {
 		return
 	}
 	if err := domain.DeleteProject(r.Context(), userID, projectID); err != nil {
+		if errors.Is(err, domain.ErrForbidden) {
+			utils.APIJSONError(w, http.StatusForbidden, "forbidden", "Only the owner can delete this project.")
+			return
+		}
 		if errors.Is(err, domain.ErrNotFound) {
 			utils.APIJSONError(w, http.StatusNotFound, "not_found", "Project not found.")
 			return

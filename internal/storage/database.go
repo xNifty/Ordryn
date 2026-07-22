@@ -416,6 +416,22 @@ func MigrateUsersAddDigestSettings() error {
 	return nil
 }
 
+// MigrateUsersAddAllowProjectInvites adds preference for receiving project invites (default on).
+func MigrateUsersAddAllowProjectInvites() error {
+	pool, err := OpenDatabase()
+	if err != nil {
+		return fmt.Errorf("failed to open database: %v", err)
+	}
+	defer CloseDatabase(pool)
+
+	_, err = pool.Exec(context.Background(),
+		"ALTER TABLE users ADD COLUMN IF NOT EXISTS allow_project_invites BOOLEAN DEFAULT TRUE")
+	if err != nil {
+		return fmt.Errorf("failed to add allow_project_invites: %v", err)
+	}
+	return nil
+}
+
 type User struct {
 	ID           int
 	Email        string

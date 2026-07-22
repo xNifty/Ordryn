@@ -29,14 +29,15 @@ type apiAuthLoginRequest struct {
 }
 
 type apiUserMeJSON struct {
-	ID            int      `json:"id"`
-	Email         string   `json:"email"`
-	UserName      string   `json:"user_name"`
-	Timezone      string   `json:"timezone"`
-	ItemsPerPage  int      `json:"items_per_page"`
-	Permissions   []string `json:"permissions"`
-	DigestEnabled bool     `json:"digest_enabled"`
-	DigestHour    int      `json:"digest_hour"`
+	ID                  int      `json:"id"`
+	Email               string   `json:"email"`
+	UserName            string   `json:"user_name"`
+	Timezone            string   `json:"timezone"`
+	ItemsPerPage        int      `json:"items_per_page"`
+	Permissions         []string `json:"permissions"`
+	DigestEnabled       bool     `json:"digest_enabled"`
+	DigestHour          int      `json:"digest_hour"`
+	AllowProjectInvites bool     `json:"allow_project_invites"`
 }
 
 func profileToMeJSON(p *storage.UserProfile) apiUserMeJSON {
@@ -45,14 +46,15 @@ func profileToMeJSON(p *storage.UserProfile) apiUserMeJSON {
 		perms = []string{}
 	}
 	return apiUserMeJSON{
-		ID:            p.ID,
-		Email:         p.Email,
-		UserName:      p.UserName,
-		Timezone:      p.Timezone,
-		ItemsPerPage:  p.ItemsPerPage,
-		Permissions:   perms,
-		DigestEnabled: p.DigestEnabled,
-		DigestHour:    p.DigestHour,
+		ID:                  p.ID,
+		Email:               p.Email,
+		UserName:            p.UserName,
+		Timezone:            p.Timezone,
+		ItemsPerPage:        p.ItemsPerPage,
+		Permissions:         perms,
+		DigestEnabled:       p.DigestEnabled,
+		DigestHour:          p.DigestHour,
+		AllowProjectInvites: p.AllowProjectInvites,
 	}
 }
 

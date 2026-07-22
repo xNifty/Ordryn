@@ -5,8 +5,10 @@ import type { AdminSettings, AdminUser } from '@/api/types'
 import { APIError } from '@/api/types'
 import { useSite } from '@/composables/useSite'
 import { useToast } from '@/composables/useToast'
+import { useConfirm } from '@/composables/useConfirm'
 
 const toast = useToast()
+const { askConfirm } = useConfirm()
 const { refresh: refreshSite } = useSite()
 const users = ref<AdminUser[]>([])
 const busy = ref(false)
@@ -48,6 +50,15 @@ async function saveSettings() {
 }
 
 async function toggleBan(user: AdminUser) {
+  const ok = await askConfirm({
+    title: user.is_banned ? 'Unban user?' : 'Ban user?',
+    message: user.is_banned
+      ? `Unban ${user.email}?`
+      : `Ban ${user.email}? They will no longer be able to sign in.`,
+    confirmLabel: user.is_banned ? 'Unban' : 'Ban',
+    danger: !user.is_banned,
+  })
+  if (!ok) return
   try {
     if (user.is_banned) {
       await api.unbanUser(user.id)

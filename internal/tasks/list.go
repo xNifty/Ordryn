@@ -79,7 +79,7 @@ func ReturnPaginationForUserWithFilters(page, pageSize int, userID *int, timezon
 		FROM tasks t LEFT JOIN projects p ON t.project_id = p.id `
 
 	favArgs := []interface{}{*userID, timezone}
-	favWhere := "WHERE t.user_id = $1 AND t.is_favorite = true"
+	favWhere := "WHERE " + storage.TaskVisibleCondition("t", "$1") + " AND t.is_favorite = true"
 	favWhere, favArgs = appendFilterSQL(favWhere, favArgs, filters, timezone, "t")
 	favRows, err := pool.Query(context.Background(), taskSelect+favWhere+filters.orderByClause("t"), favArgs...)
 	if err != nil {
@@ -97,7 +97,7 @@ func ReturnPaginationForUserWithFilters(page, pageSize int, userID *int, timezon
 	}
 
 	countArgs := []interface{}{*userID}
-	countWhere := "WHERE user_id = $1" + nonFavoriteCond
+	countWhere := "WHERE " + storage.TaskVisibleCondition("", "$1") + nonFavoriteCond
 	countWhere, countArgs = appendFilterSQL(countWhere, countArgs, filters, timezone, "")
 	var totalTasks int
 	if err := pool.QueryRow(context.Background(), "SELECT COUNT(*) FROM tasks "+countWhere, countArgs...).Scan(&totalTasks); err != nil {
@@ -110,7 +110,7 @@ func ReturnPaginationForUserWithFilters(page, pageSize int, userID *int, timezon
 	}
 
 	nonFavArgs := []interface{}{pageSize, timezone, *userID, offset}
-	nonFavWhere := "WHERE t.user_id = $3 AND (t.is_favorite IS NULL OR t.is_favorite = false)"
+	nonFavWhere := "WHERE " + storage.TaskVisibleCondition("t", "$3") + " AND (t.is_favorite IS NULL OR t.is_favorite = false)"
 	nonFavWhere, nonFavArgs = appendFilterSQL(nonFavWhere, nonFavArgs, filters, timezone, "t")
 	rows, err := pool.Query(
 		context.Background(),
@@ -156,7 +156,7 @@ func SearchTasksForUserWithFilters(page, pageSize int, searchQuery string, userI
 	searchPattern := "%" + searchQuery + "%"
 
 	countArgs := []interface{}{searchPattern, *userID}
-	countWhere := "WHERE user_id = $2 AND " + searchMatchClause("")
+	countWhere := "WHERE " + storage.TaskVisibleCondition("", "$2") + " AND " + searchMatchClause("")
 	countWhere, countArgs = appendFilterSQL(countWhere, countArgs, filters, timezone, "")
 	var totalTasks int
 	if err := pool.QueryRow(context.Background(), "SELECT COUNT(*) FROM tasks "+countWhere, countArgs...).Scan(&totalTasks); err != nil {
@@ -164,7 +164,7 @@ func SearchTasksForUserWithFilters(page, pageSize int, searchQuery string, userI
 	}
 
 	selectArgs := []interface{}{searchPattern, timezone, pageSize, *userID, offset}
-	selectWhere := "WHERE (t.title ILIKE $1 OR t.description ILIKE $1 OR EXISTS (SELECT 1 FROM task_tags tt JOIN tags tg ON tt.tag_id = tg.id WHERE tt.task_id = t.id AND tg.name ILIKE $1)) AND t.user_id = $4"
+	selectWhere := "WHERE (t.title ILIKE $1 OR t.description ILIKE $1 OR EXISTS (SELECT 1 FROM task_tags tt JOIN tags tg ON tt.tag_id = tg.id WHERE tt.task_id = t.id AND tg.name ILIKE $1)) AND " + storage.TaskVisibleCondition("t", "$4")
 	selectWhere, selectArgs = appendFilterSQL(selectWhere, selectArgs, filters, timezone, "t")
 
 	query := `SELECT t.id, t.title, t.description, t.completed,
@@ -339,7 +339,7 @@ func FetchTaskByIDForUser(taskID, userID int, timezone string, page int) (Task, 
 			COALESCE(TO_CHAR((t.date_modified AT TIME ZONE 'UTC') AT TIME ZONE $3, 'YYYY/MM/DD HH:MI AM'), '') AS date_modified,
 			COALESCE(t.is_favorite,false), COALESCE(t.position,0), COALESCE(t.priority,0), t.project_id, COALESCE(p.name,'')
 		FROM tasks t LEFT JOIN projects p ON t.project_id = p.id
-		WHERE t.id = $1 AND t.user_id = $2`, taskID, userID, timezone).Scan(
+		WHERE t.id = $1 AND `+storage.TaskVisibleCondition("t", "$2"), taskID, userID, timezone).Scan(
 		&task.ID, &task.Title, &task.Description, &task.Completed,
 		&task.DateAdded, &task.DueDate, &task.DateCreated, &task.DateModified,
 		&task.IsFavorite, &task.Position, &task.Priority, &projectID, &projectName)
@@ -368,13 +368,15 @@ func TaskMatchesFilters(taskID, userID int, timezone string, filters ListFilters
 
 	var countWhere string
 	var args []interface{}
+	vis := storage.TaskVisibleCondition("", "$3")
+	visNoSearch := storage.TaskVisibleCondition("", "$2")
 	if search != "" {
 		searchPattern := "%" + search + "%"
 		args = []interface{}{searchPattern, taskID, userID}
-		countWhere = "WHERE id = $2 AND user_id = $3 AND " + searchMatchClause("")
+		countWhere = "WHERE id = $2 AND " + vis + " AND " + searchMatchClause("")
 	} else {
 		args = []interface{}{taskID, userID}
-		countWhere = "WHERE id = $1 AND user_id = $2"
+		countWhere = "WHERE id = $1 AND " + visNoSearch
 	}
 	countWhere, args = appendFilterSQL(countWhere, args, filters, timezone, "")
 

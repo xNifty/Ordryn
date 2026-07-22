@@ -11,15 +11,16 @@ import (
 
 // UserProfile is the public account view for /api/v1/me and auth responses.
 type UserProfile struct {
-	ID            int
-	Email         string
-	UserName      string
-	Timezone      string
-	ItemsPerPage  int
-	RoleID        int
-	Permissions   []string
-	DigestEnabled bool
-	DigestHour    int
+	ID                  int
+	Email               string
+	UserName            string
+	Timezone            string
+	ItemsPerPage        int
+	RoleID              int
+	Permissions         []string
+	DigestEnabled       bool
+	DigestHour          int
+	AllowProjectInvites bool
 }
 
 // GetUserProfileByID loads profile fields and role permissions for a user.
@@ -34,12 +35,13 @@ func GetUserProfileByID(userID int) (*UserProfile, error) {
 	err = pool.QueryRow(context.Background(), `
 		SELECT u.id, u.email, COALESCE(u.user_name, ''), COALESCE(u.timezone, 'America/New_York'),
 		       COALESCE(u.items_per_page, 15), u.role_id, COALESCE(r.permissions, '{}'),
-		       COALESCE(u.digest_enabled, false), COALESCE(u.digest_hour, 8)
+		       COALESCE(u.digest_enabled, false), COALESCE(u.digest_hour, 8),
+		       COALESCE(u.allow_project_invites, true)
 		FROM users u
 		LEFT JOIN roles r ON r.id = u.role_id
 		WHERE u.id = $1`, userID).Scan(
 		&p.ID, &p.Email, &p.UserName, &p.Timezone, &p.ItemsPerPage, &p.RoleID, &p.Permissions,
-		&p.DigestEnabled, &p.DigestHour,
+		&p.DigestEnabled, &p.DigestHour, &p.AllowProjectInvites,
 	)
 	if err != nil {
 		return nil, err
@@ -51,7 +53,7 @@ func GetUserProfileByID(userID int) (*UserProfile, error) {
 }
 
 // UpdateUserProfileByID updates mutable profile fields for a user.
-func UpdateUserProfileByID(userID int, userName, timezone string, itemsPerPage int, digestEnabled bool, digestHour int) error {
+func UpdateUserProfileByID(userID int, userName, timezone string, itemsPerPage int, digestEnabled bool, digestHour int, allowProjectInvites bool) error {
 	pool, err := OpenDatabase()
 	if err != nil {
 		return err
@@ -60,10 +62,27 @@ func UpdateUserProfileByID(userID int, userName, timezone string, itemsPerPage i
 
 	_, err = pool.Exec(context.Background(), `
 		UPDATE users SET user_name = $1, timezone = $2, items_per_page = $3,
-		       digest_enabled = $4, digest_hour = $5
-		WHERE id = $6`,
-		userName, timezone, itemsPerPage, digestEnabled, digestHour, userID)
+		       digest_enabled = $4, digest_hour = $5, allow_project_invites = $6
+		WHERE id = $7`,
+		userName, timezone, itemsPerPage, digestEnabled, digestHour, allowProjectInvites, userID)
 	return err
+}
+
+// UserAllowsProjectInvites reports whether the user accepts project invites (default true).
+func UserAllowsProjectInvites(userID int) (bool, error) {
+	pool, err := OpenDatabase()
+	if err != nil {
+		return false, err
+	}
+	defer CloseDatabase(pool)
+
+	var allow bool
+	err = pool.QueryRow(context.Background(),
+		`SELECT COALESCE(allow_project_invites, true) FROM users WHERE id = $1`, userID).Scan(&allow)
+	if err != nil {
+		return false, err
+	}
+	return allow, nil
 }
 
 // GetPasswordHashByID returns the bcrypt hash for a user id.

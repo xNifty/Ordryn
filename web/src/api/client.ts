@@ -11,8 +11,13 @@ import type {
   DeviceStatus,
   Invite,
   Project,
+  ProjectEvent,
+  ProjectInvite,
+  ProjectMember,
   SavedView,
   SavedViewFilter,
+  ShareLink,
+  ShareLinkView,
   SiteInfo,
   Tag,
   Task,
@@ -153,7 +158,7 @@ export const api = {
     return request<{ ok: boolean }>('/api/v1/auth/logout', { method: 'POST' })
   },
 
-  patchMe(payload: Partial<Pick<User, 'user_name' | 'timezone' | 'items_per_page' | 'digest_enabled' | 'digest_hour'>>) {
+  patchMe(payload: Partial<Pick<User, 'user_name' | 'timezone' | 'items_per_page' | 'digest_enabled' | 'digest_hour' | 'allow_project_invites'>>) {
     return request<User>('/api/v1/me', {
       method: 'PATCH',
       body: JSON.stringify(payload),
@@ -292,6 +297,77 @@ export const api = {
 
   deleteProject(id: number) {
     return request<void>(`/api/v1/projects/${id}`, { method: 'DELETE' })
+  },
+
+  listProjectMembers(projectId: number) {
+    return request<ProjectMember[]>(`/api/v1/projects/${projectId}/members`)
+  },
+
+  updateProjectMember(projectId: number, userId: number, role: 'editor' | 'viewer') {
+    return request<void>(`/api/v1/projects/${projectId}/members/${userId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ role }),
+    })
+  },
+
+  removeProjectMember(projectId: number, userId: number) {
+    return request<void>(`/api/v1/projects/${projectId}/members/${userId}`, { method: 'DELETE' })
+  },
+
+  listProjectInvites(projectId: number) {
+    return request<ProjectInvite[]>(`/api/v1/projects/${projectId}/invites`)
+  },
+
+  createProjectInvite(projectId: number, email: string, role: 'editor' | 'viewer') {
+    return request<{ message: string }>(`/api/v1/projects/${projectId}/invites`, {
+      method: 'POST',
+      body: JSON.stringify({ email, role }),
+    })
+  },
+
+  revokeProjectInvite(projectId: number, inviteId: number) {
+    return request<void>(`/api/v1/projects/${projectId}/invites/${inviteId}`, { method: 'DELETE' })
+  },
+
+  listProjectEvents(projectId: number) {
+    return request<ProjectEvent[]>(`/api/v1/projects/${projectId}/events`)
+  },
+
+  listMyProjectInvites() {
+    return request<ProjectInvite[]>('/api/v1/project-invites')
+  },
+
+  acceptProjectInvite(id: number) {
+    return request<void>(`/api/v1/project-invites/${id}/accept`, { method: 'POST' })
+  },
+
+  declineProjectInvite(id: number) {
+    return request<void>(`/api/v1/project-invites/${id}/decline`, { method: 'POST' })
+  },
+
+  listShareLinks(scopeType: 'project' | 'tag', scopeId: number) {
+    return request<ShareLink[]>(
+      `/api/v1/share-links?scope_type=${encodeURIComponent(scopeType)}&scope_id=${scopeId}`,
+    )
+  },
+
+  createShareLink(scopeType: 'project' | 'tag', scopeId: number, expiresAt?: string) {
+    return request<ShareLink>('/api/v1/share-links', {
+      method: 'POST',
+      body: JSON.stringify({
+        scope_type: scopeType,
+        scope_id: scopeId,
+        ...(expiresAt ? { expires_at: expiresAt } : {}),
+      }),
+    })
+  },
+
+  revokeShareLink(id: number) {
+    return request<void>(`/api/v1/share-links/${id}`, { method: 'DELETE' })
+  },
+
+  viewShareLink(token: string) {
+    return request<ShareLinkView>(`/api/v1/share-links/view/${encodeURIComponent(token)}`)
   },
 
   listTags() {

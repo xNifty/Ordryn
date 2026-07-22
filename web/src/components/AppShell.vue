@@ -9,6 +9,7 @@ import { api } from '@/api/client'
 import ToastHost from '@/components/ToastHost.vue'
 import TaskSidebar from '@/components/TaskSidebar.vue'
 import ChangelogModal from '@/components/ChangelogModal.vue'
+import ConfirmModal from '@/components/ConfirmModal.vue'
 
 const { isAuthenticated, user, logout, hasPermission } = useAuth()
 const { siteInfo, siteName, refresh: refreshSite } = useSite()
@@ -191,6 +192,7 @@ async function onLogout() {
   </footer>
 
   <ToastHost />
+  <ConfirmModal />
   <TaskSidebar v-if="isAuthenticated" />
   <ChangelogModal v-if="showChangelog" />
 </template>

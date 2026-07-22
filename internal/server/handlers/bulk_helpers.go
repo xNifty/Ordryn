@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"GoTodo/internal/domain"
 	"GoTodo/internal/server/utils"
 	"GoTodo/internal/storage"
 
@@ -43,14 +44,16 @@ func parseBulkTaskIDs(raw string) ([]int, error) {
 
 func verifyTasksOwnedByUser(ctx context.Context, db *pgxpool.Pool, ids []int, userID int) error {
 	for _, id := range ids {
-		var owner int
-		if err := db.QueryRow(ctx, "SELECT user_id FROM tasks WHERE id = $1", id).Scan(&owner); err != nil {
-			return fmt.Errorf("task not found")
+		canRead, writeRole, _, err := storage.CanUserAccessTask(id, userID)
+		if err != nil {
+			return err
 		}
-		if owner != userID {
+		if !canRead || !storage.RoleCanWrite(writeRole) {
 			return fmt.Errorf("not authorized")
 		}
 	}
+	_ = ctx
+	_ = db
 	return nil
 }
 
@@ -68,7 +71,7 @@ func deleteTasksForUser(ctx context.Context, db *pgxpool.Pool, r *http.Request, 
 func deleteTaskRows(ctx context.Context, db *pgxpool.Pool, ids []int, userID int) error {
 	for _, id := range ids {
 		logTaskEvent(id, userID, "deleted", nil)
-		tag, err := db.Exec(ctx, "DELETE FROM tasks WHERE id = $1 AND user_id = $2", id, userID)
+		tag, err := db.Exec(ctx, "DELETE FROM tasks WHERE id = $1", id)
 		if err != nil {
 			return err
 		}
@@ -98,7 +101,7 @@ func deleteTasksForAPI(ctx context.Context, db *pgxpool.Pool, r *http.Request, w
 
 func bulkSetCompleted(ctx context.Context, db *pgxpool.Pool, ids []int, userID int, completed bool) error {
 	for _, id := range ids {
-		if _, err := db.Exec(ctx, "UPDATE tasks SET completed = $1, date_modified = NOW() AT TIME ZONE 'UTC' WHERE id = $2 AND user_id = $3", completed, id, userID); err != nil {
+		if _, err := db.Exec(ctx, "UPDATE tasks SET completed = $1, date_modified = NOW() AT TIME ZONE 'UTC' WHERE id = $2", completed, id); err != nil {
 			return err
 		}
 		if completed {
@@ -112,7 +115,7 @@ func bulkSetCompleted(ctx context.Context, db *pgxpool.Pool, ids []int, userID i
 
 func bulkSetPriority(ctx context.Context, db *pgxpool.Pool, ids []int, userID int, priority int) error {
 	for _, id := range ids {
-		if _, err := db.Exec(ctx, "UPDATE tasks SET priority = $1, date_modified = NOW() AT TIME ZONE 'UTC' WHERE id = $2 AND user_id = $3", priority, id, userID); err != nil {
+		if _, err := db.Exec(ctx, "UPDATE tasks SET priority = $1, date_modified = NOW() AT TIME ZONE 'UTC' WHERE id = $2", priority, id); err != nil {
 			return err
 		}
 		logTaskEvent(id, userID, "priority_changed", map[string]interface{}{"to": priorityLabel(priority)})
@@ -137,11 +140,11 @@ func parseBulkDueDate(raw string) (string, error) {
 func bulkSetDueDate(ctx context.Context, db *pgxpool.Pool, ids []int, userID int, dueDate string) error {
 	for _, id := range ids {
 		if dueDate == "" {
-			if _, err := db.Exec(ctx, "UPDATE tasks SET due_date = NULL, date_modified = NOW() AT TIME ZONE 'UTC' WHERE id = $1 AND user_id = $2", id, userID); err != nil {
+			if _, err := db.Exec(ctx, "UPDATE tasks SET due_date = NULL, date_modified = NOW() AT TIME ZONE 'UTC' WHERE id = $1", id); err != nil {
 				return err
 			}
 		} else {
-			if _, err := db.Exec(ctx, "UPDATE tasks SET due_date = $1::date, date_modified = NOW() AT TIME ZONE 'UTC' WHERE id = $2 AND user_id = $3", dueDate, id, userID); err != nil {
+			if _, err := db.Exec(ctx, "UPDATE tasks SET due_date = $1::date, date_modified = NOW() AT TIME ZONE 'UTC' WHERE id = $2", dueDate, id); err != nil {
 				return err
 			}
 		}
@@ -154,7 +157,7 @@ func bulkMoveProject(ctx context.Context, db *pgxpool.Pool, ids []int, userID in
 	projectName := projectDisplayName(userID, projectIDFromForm(projectIDStr))
 	if projectIDStr == "" || projectIDStr == "0" {
 		for _, id := range ids {
-			if _, err := db.Exec(ctx, "UPDATE tasks SET project_id = NULL, date_modified = NOW() AT TIME ZONE 'UTC' WHERE id = $1 AND user_id = $2", id, userID); err != nil {
+			if _, err := db.Exec(ctx, "UPDATE tasks SET project_id = NULL, date_modified = NOW() AT TIME ZONE 'UTC' WHERE id = $1", id); err != nil {
 				return err
 			}
 			logTaskEvent(id, userID, "moved_project", map[string]interface{}{"project": projectName})
@@ -165,11 +168,11 @@ func bulkMoveProject(ctx context.Context, db *pgxpool.Pool, ids []int, userID in
 	if err != nil {
 		return fmt.Errorf("invalid project")
 	}
-	if _, err := storage.GetProjectByID(pid, userID); err != nil {
+	if err := domain.RequireProjectWriteAccess(pid, userID); err != nil {
 		return fmt.Errorf("invalid project selection")
 	}
 	for _, id := range ids {
-		if _, err := db.Exec(ctx, "UPDATE tasks SET project_id = $1, date_modified = NOW() AT TIME ZONE 'UTC' WHERE id = $2 AND user_id = $3", pid, id, userID); err != nil {
+		if _, err := db.Exec(ctx, "UPDATE tasks SET project_id = $1, date_modified = NOW() AT TIME ZONE 'UTC' WHERE id = $2", pid, id); err != nil {
 			return err
 		}
 		logTaskEvent(id, userID, "moved_project", map[string]interface{}{"project": projectName})

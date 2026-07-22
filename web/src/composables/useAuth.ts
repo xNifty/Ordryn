@@ -46,7 +46,7 @@ export function useAuth() {
   }
 
   async function updateProfile(
-    payload: Partial<Pick<User, 'user_name' | 'timezone' | 'items_per_page' | 'digest_enabled' | 'digest_hour'>>,
+    payload: Partial<Pick<User, 'user_name' | 'timezone' | 'items_per_page' | 'digest_enabled' | 'digest_hour' | 'allow_project_invites'>>,
   ) {
     user.value = await api.patchMe(payload)
     return user.value

@@ -6,6 +6,7 @@ import type { Project, SavedView, Tag } from '@/api/types'
 import { APIError } from '@/api/types'
 import { useTaskListFilters } from '@/composables/useTaskListFilters'
 import { useToast } from '@/composables/useToast'
+import { useConfirm } from '@/composables/useConfirm'
 
 const views = ref<SavedView[]>([])
 const projects = ref<Project[]>([])
@@ -21,6 +22,7 @@ const tag = ref('')
 const sort = ref('')
 const search = ref('')
 const toast = useToast()
+const { askConfirm } = useConfirm()
 const router = useRouter()
 const { applySavedView } = useTaskListFilters()
 
@@ -75,7 +77,13 @@ async function apply(view: SavedView) {
 }
 
 async function remove(view: SavedView) {
-  if (!confirm(`Delete saved view "${view.name}"?`)) return
+  const ok = await askConfirm({
+    title: 'Delete saved view?',
+    message: `Delete saved view “${view.name}”?`,
+    confirmLabel: 'Delete',
+    danger: true,
+  })
+  if (!ok) return
   try {
     await api.deleteSavedView(view.id)
     toast.push('Deleted', 'info')

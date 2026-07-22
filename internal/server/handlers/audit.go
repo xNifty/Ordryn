@@ -71,7 +71,7 @@ func projectDisplayName(userID, projectID int) string {
 	if projectID == 0 {
 		return "No project"
 	}
-	if p, err := storage.GetProjectByID(projectID, userID); err == nil {
+	if p, err := storage.GetAccessibleProjectByID(projectID, userID); err == nil {
 		return p.Name
 	}
 	return "Project"
