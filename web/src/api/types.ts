@@ -22,6 +22,7 @@ export type Project = {
   name: string
   role?: 'owner' | 'editor' | 'viewer'
   owner_email?: string
+  owner_user_name?: string
   owner_user_id?: number
 }
 
@@ -43,6 +44,7 @@ export type ProjectInvite = {
   created_at: string
   project_name?: string
   inviter_email?: string
+  inviter_user_name?: string
 }
 
 export type ProjectEvent = {
@@ -50,6 +52,7 @@ export type ProjectEvent = {
   project_id: number
   actor_user_id: number
   actor_email?: string
+  actor_user_name?: string
   event_type: string
   source: 'project' | 'task'
   task_id?: number

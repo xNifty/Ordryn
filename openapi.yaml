@@ -1968,6 +1968,8 @@ components:
           enum: [owner, editor, viewer]
         owner_email:
           type: string
+        owner_user_name:
+          type: string
         owner_user_id:
           type: integer
 
@@ -2011,6 +2013,8 @@ components:
           type: string
         inviter_email:
           type: string
+        inviter_user_name:
+          type: string
 
     ProjectInviteCreate:
       type: object
@@ -2043,6 +2047,8 @@ components:
         actor_user_id:
           type: integer
         actor_email:
+          type: string
+        actor_user_name:
           type: string
         event_type:
           type: string

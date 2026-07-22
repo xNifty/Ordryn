@@ -3,7 +3,7 @@
     <h4 class="h6">Members</h4>
     <ul class="list-unstyled mb-3">
       <li v-for="m in members" :key="m.user_id" class="d-flex flex-wrap align-items-center gap-2 mb-1">
-        <span>{{ m.email }}</span>
+        <span>{{ m.user_name || m.email }}</span>
         <span class="badge text-bg-secondary">{{ m.role }}</span>
         <template v-if="m.role !== 'owner'">
           <select
@@ -111,7 +111,7 @@
         <ul class="list-unstyled small mb-0" v-if="events.length">
           <li v-for="ev in events" :key="ev.source + '-' + ev.id" class="mb-1 text-muted">
             <strong>{{ ev.label }}</strong>
-            <span v-if="ev.actor_email"> · {{ ev.actor_email }}</span>
+            <span v-if="ev.actor_user_name || ev.actor_email"> · {{ ev.actor_user_name || ev.actor_email }}</span>
             · {{ formatTime(ev.created_at) }}
           </li>
         </ul>
