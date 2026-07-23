@@ -5,6 +5,7 @@ import { useAuth } from '@/composables/useAuth'
 import { useToast } from '@/composables/useToast'
 import { api } from '@/api/client'
 import { APIError } from '@/api/types'
+import { takeDeviceAuthReturn } from '@/deviceAuthReturn'
 
 const userName = ref('')
 const busy = ref(false)
@@ -48,7 +49,8 @@ async function onSubmit() {
   try {
     await claimUsername(userName.value.trim())
     push('Username saved', 'success')
-    await router.replace('/')
+    const deviceReturn = takeDeviceAuthReturn()
+    await router.replace(deviceReturn || '/')
   } catch (err) {
     error.value = err instanceof APIError ? err.message : 'Failed to set username'
   } finally {
