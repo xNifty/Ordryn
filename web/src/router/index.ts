@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { appBase } from '@/base'
 import { useAuth } from '@/composables/useAuth'
+import { isDeviceAuthPath, stashDeviceAuthReturn } from '@/deviceAuthReturn'
 
 const router = createRouter({
   history: createWebHistory(appBase()),
@@ -143,6 +144,9 @@ router.beforeEach(async (to) => {
   if (to.meta.requiresAuth && !auth.isAuthenticated.value) {
     // Only preserve non-default destinations; `/` is the post-login default.
     if (to.fullPath && to.fullPath !== '/') {
+      if (isDeviceAuthPath(to.fullPath)) {
+        stashDeviceAuthReturn(to.fullPath)
+      }
       return { name: 'login', query: { redirect: to.fullPath } }
     }
     return { name: 'login' }
@@ -151,7 +155,11 @@ router.beforeEach(async (to) => {
     // Preserve post-login redirects (e.g. /auth/device?user_code=…) so app SSO
     // is not diverted to the username-claim screen mid-flow.
     const redirect = typeof to.query.redirect === 'string' ? to.query.redirect : null
-    if (redirect) {
+    if (redirect && isDeviceAuthPath(redirect)) {
+      stashDeviceAuthReturn(redirect)
+      return redirect
+    }
+    if (redirect && redirect.startsWith('/') && !redirect.startsWith('//')) {
       return redirect
     }
     if (auth.needsUsernameClaim.value) {
@@ -159,6 +167,8 @@ router.beforeEach(async (to) => {
     }
     return { name: 'tasks' }
   }
+  // allowUsernameClaim = route may be visited while a free username claim is still pending
+  // (claim screen itself, and /auth/device so app browser SSO is not taken over).
   if (
     auth.isAuthenticated.value &&
     auth.needsUsernameClaim.value &&
