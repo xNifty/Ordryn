@@ -1,0 +1,15 @@
+{
+  "name": "GoTodo (Ordryn)",
+  "user": "ubuntu",
+  "install": "bash .cursor/scripts/install.sh",
+  "start": "bash .cursor/scripts/start.sh",
+  "terminals": [
+    {
+      "name": "gotodo-server",
+      "command": "go run ."
+    }
+  ],
+  "ports": [
+    { "name": "GoTodo server", "port": 8080 }
+  ]
+}
