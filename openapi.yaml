@@ -2085,6 +2085,12 @@ paths:
       security:
         - SessionCookie: []
         - BearerAuth: []
+      parameters:
+        - name: surface
+          in: query
+          schema:
+            type: string
+          description: Host API 2 surface id (for example board)
       responses:
         "200":
           description: HTML or static asset from the extension folder
@@ -2092,6 +2098,102 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "404":
           $ref: "#/components/responses/NotFound"
+
+  /api/v2/projects/{id}/extensions/{extensionId}/store:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+      - name: extensionId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Projects]
+      summary: List extension store keys for this project
+      security:
+        - SessionCookie: []
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Key list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  keys:
+                    type: array
+                    items:
+                      type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v2/projects/{id}/extensions/{extensionId}/store/{key}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+      - name: extensionId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: key
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Projects]
+      summary: Get an extension store document
+      security:
+        - SessionCookie: []
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Document with revision
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [Projects]
+      summary: Put an extension store document (optimistic revision)
+      security:
+        - SessionCookie: []
+        - BearerAuth: []
+      parameters:
+        - name: If-Match
+          in: header
+          required: false
+          schema:
+            type: string
+          description: Expected revision; overrides body revision when set
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                revision:
+                  type: integer
+                value: {}
+      responses:
+        "200":
+          description: Written document
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: Revision conflict
+        "401":
+          $ref: "#/components/responses/Unauthorized"
 
   /api/v2/projects/{id}/inbound:
     parameters:

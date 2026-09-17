@@ -8,7 +8,7 @@ import (
 )
 
 // CurrentHostAPI is the highest hook host API this build understands.
-const CurrentHostAPI = 1
+const CurrentHostAPI = 2
 
 var idPattern = regexp.MustCompile(`^[a-z][a-z0-9-]{1,32}$`)
 
@@ -154,12 +154,26 @@ const (
 	PermTasksRead     = "tasks:read"
 	PermTasksWrite    = "tasks:write"
 	PermCommentsWrite = "comments:write"
+	PermStoreRead     = "store:read"
+	PermStoreWrite    = "store:write"
 )
 
 var knownPermissions = map[string]struct{}{
 	PermTasksRead:     {},
 	PermTasksWrite:    {},
 	PermCommentsWrite: {},
+	PermStoreRead:     {},
+	PermStoreWrite:    {},
+}
+
+const (
+	SurfaceProjectExtensions = "project.extensions"
+	SurfaceKanbanTab         = "kanban.tab"
+)
+
+var knownSurfaces = map[string]struct{}{
+	SurfaceProjectExtensions: {},
+	SurfaceKanbanTab:         {},
 }
 
 const (
@@ -199,6 +213,7 @@ type Manifest struct {
 	License     string            `json:"license,omitempty"`
 	Icon        string            `json:"icon,omitempty"`
 	UI          string            `json:"ui,omitempty"`
+	Surfaces    []Surface         `json:"surfaces,omitempty"`
 	Hooks       []Hook            `json:"hooks,omitempty"`
 	Delivery    *Delivery         `json:"delivery,omitempty"`
 	Settings    []Setting         `json:"settings,omitempty"`
@@ -207,6 +222,14 @@ type Manifest struct {
 	Controls    []string          `json:"controls,omitempty"`
 	Permissions []string          `json:"permissions,omitempty"`
 	Actions     []string          `json:"actions,omitempty"`
+}
+
+// Surface is a sandboxed HTML panel placement (host API 2).
+type Surface struct {
+	ID    string `json:"id"`
+	File  string `json:"file"`
+	At    string `json:"at"`
+	Label string `json:"label,omitempty"`
 }
 
 // Field registers a core custom field. Stored values use key "{id}.{key}".
@@ -274,7 +297,7 @@ func (s Setting) ScopeName() string {
 	}
 }
 
-// ValidateManifest checks host_api 1 rules. folderName must equal id.
+// ValidateManifest checks host API rules. folderName must equal id.
 func ValidateManifest(folderName string, m Manifest) error {
 	id := strings.TrimSpace(m.ID)
 	if !idPattern.MatchString(id) {
@@ -506,6 +529,60 @@ func ValidateManifest(folderName string, m Manifest) error {
 		seenActions[a] = struct{}{}
 		m.Actions[i] = a
 	}
+	needsHost2 := len(m.Surfaces) > 0
+	for _, p := range m.Permissions {
+		if p == PermStoreRead || p == PermStoreWrite {
+			needsHost2 = true
+			break
+		}
+	}
+	if needsHost2 && m.HostAPI < 2 {
+		return fmt.Errorf("surfaces and store permissions require host_api 2")
+	}
+	seenSurfaceIDs := make(map[string]struct{})
+	for i := range m.Surfaces {
+		s := &m.Surfaces[i]
+		id := strings.TrimSpace(s.ID)
+		if !settingKeyPattern.MatchString(id) {
+			return fmt.Errorf("surfaces id %q is invalid", s.ID)
+		}
+		if _, dup := seenSurfaceIDs[id]; dup {
+			return fmt.Errorf("duplicate surfaces id %q", id)
+		}
+		seenSurfaceIDs[id] = struct{}{}
+		s.ID = id
+		file := strings.TrimSpace(s.File)
+		if file == "" {
+			return fmt.Errorf("surfaces.file is required for %s", id)
+		}
+		if err := validateRelPath("surfaces.file", file); err != nil {
+			return err
+		}
+		s.File = file
+		at := strings.ToLower(strings.TrimSpace(s.At))
+		if _, ok := knownSurfaces[at]; !ok {
+			return fmt.Errorf("unknown surfaces.at %q for %s", s.At, id)
+		}
+		s.At = at
+		label := strings.TrimSpace(s.Label)
+		if len(label) > maxHookLabelLen {
+			return fmt.Errorf("surfaces.label is too long for %s", id)
+		}
+		s.Label = label
+	}
+	hasKanban := false
+	hasEnableSurface := m.HasUI() || m.HasFields() || m.HasProjectSettings() || m.HasMemberSettings()
+	for _, s := range m.Surfaces {
+		if s.At == SurfaceKanbanTab {
+			hasKanban = true
+		}
+		if s.At == SurfaceProjectExtensions {
+			hasEnableSurface = true
+		}
+	}
+	if hasKanban && !hasEnableSurface {
+		return fmt.Errorf("kanban.tab requires a project.extensions surface (or ui) so the extension can be enabled")
+	}
 	return nil
 }
 
@@ -638,12 +715,69 @@ func (m Manifest) HasFields() bool {
 // HasProjectSurface reports whether the extension should appear on the project Extensions tab.
 // Site-only hook extensions (for example join.request) stay in Admin → Extensions.
 func (m Manifest) HasProjectSurface() bool {
-	return m.HasProjectSettings() || m.HasMemberSettings() || m.HasFields() || m.HasUI()
+	return m.HasProjectSettings() || m.HasMemberSettings() || m.HasFields() || m.HasUI() || m.HasSurfaces()
 }
 
 // HasUI reports whether the manifest declares a sandboxed panel.
 func (m Manifest) HasUI() bool {
 	return strings.TrimSpace(m.UI) != ""
+}
+
+// HasSurfaces reports whether the manifest declares host API 2 surfaces (or a legacy ui panel).
+func (m Manifest) HasSurfaces() bool {
+	return len(m.ResolvedSurfaces()) > 0
+}
+
+// ResolvedSurfaces returns declared surfaces, synthesizing project.extensions from ui when needed.
+func (m Manifest) ResolvedSurfaces() []Surface {
+	out := make([]Surface, 0, len(m.Surfaces)+1)
+	hasSettings := false
+	for _, s := range m.Surfaces {
+		id := strings.TrimSpace(s.ID)
+		file := strings.TrimSpace(s.File)
+		at := strings.ToLower(strings.TrimSpace(s.At))
+		if id == "" || file == "" || at == "" {
+			continue
+		}
+		label := strings.TrimSpace(s.Label)
+		if label == "" {
+			label = strings.TrimSpace(m.Name)
+		}
+		if at == SurfaceProjectExtensions {
+			hasSettings = true
+		}
+		out = append(out, Surface{ID: id, File: file, At: at, Label: label})
+	}
+	if !hasSettings {
+		if ui := strings.TrimSpace(m.UI); ui != "" {
+			label := strings.TrimSpace(m.Name)
+			out = append([]Surface{{ID: "settings", File: ui, At: SurfaceProjectExtensions, Label: label}}, out...)
+		}
+	}
+	return out
+}
+
+// SurfaceByID returns a resolved surface by id.
+func (m Manifest) SurfaceByID(id string) (Surface, bool) {
+	id = strings.TrimSpace(id)
+	for _, s := range m.ResolvedSurfaces() {
+		if s.ID == id {
+			return s, true
+		}
+	}
+	return Surface{}, false
+}
+
+// SurfacesAt returns resolved surfaces for a placement.
+func (m Manifest) SurfacesAt(at string) []Surface {
+	at = strings.ToLower(strings.TrimSpace(at))
+	out := make([]Surface, 0)
+	for _, s := range m.ResolvedSurfaces() {
+		if s.At == at {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // DestinationKey is the settings key used to look up the outbound URL.
@@ -751,9 +885,11 @@ func (m Manifest) DeclaresAction(name string) bool {
 // HasCallbackPermissions reports whether outbound JSON payloads may include a callback token.
 func (m Manifest) HasCallbackPermissions() bool {
 	for _, p := range m.Permissions {
-		if strings.TrimSpace(p) != "" {
-			return true
+		p = strings.ToLower(strings.TrimSpace(p))
+		if p == "" || p == PermStoreRead || p == PermStoreWrite {
+			continue
 		}
+		return true
 	}
 	return false
 }

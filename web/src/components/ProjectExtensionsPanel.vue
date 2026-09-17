@@ -1134,7 +1134,7 @@ watch(inboundAllowed, () => {
             <div class="fw-semibold mb-2">Extension panel</div>
             <iframe
               class="w-100 border rounded"
-              style="min-height: 280px; background: var(--bs-body-bg)"
+              style="min-height: 520px; background: var(--bs-body-bg)"
               :src="uiSrc(ext)"
               sandbox="allow-scripts allow-forms allow-popups"
               referrerpolicy="no-referrer"

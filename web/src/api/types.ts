@@ -535,6 +535,13 @@ export type ExtensionSettingField = {
   options?: CustomFieldOption[]
 }
 
+export type ExtensionSurface = {
+  id: string
+  file: string
+  at: string
+  label?: string
+}
+
 export type ExtensionHook = {
   on: string
   label?: string
@@ -551,6 +558,7 @@ export type ExtensionManifest = {
   license?: string
   icon?: string
   ui?: string
+  surfaces?: ExtensionSurface[]
   hooks?: ExtensionHook[]
   delivery?: { type: string; url_from?: string; format?: string }
   settings?: ExtensionSettingField[]
@@ -663,6 +671,16 @@ export type ProjectExtensionSettings = {
 export type MemberExtensionSettings = ProjectExtensionSettings & {
   claimed_is_me?: boolean
   skip_self?: boolean
+}
+
+export type ExtensionStoreDoc = {
+  extension_id: string
+  project_id: number
+  key: string
+  revision: number
+  value: unknown
+  updated_by?: number
+  updated_at?: string
 }
 
 export type ProjectExtension = {
@@ -802,16 +820,19 @@ export type DeviceDecisionResult = {
 export type APIErrorBody = {
   error: string
   message: string
+  current?: unknown
 }
 
 export class APIError extends Error {
   code: string
   status: number
+  payload?: unknown
 
-  constructor(status: number, code: string, message: string) {
+  constructor(status: number, code: string, message: string, payload?: unknown) {
     super(message)
     this.name = 'APIError'
     this.status = status
     this.code = code
+    this.payload = payload
   }
 }

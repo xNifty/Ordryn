@@ -55,28 +55,28 @@ type projectExtensionsListJSON struct {
 }
 
 type projectExtensionPatch struct {
-	Enabled         *bool             `json:"enabled"`
-	Triggers        *[]string         `json:"triggers"`
-	Templates       map[string]string `json:"templates"`
-	StatusOnly      *bool             `json:"status_only"`
-	SkipSelf        *bool             `json:"skip_self"`
-	MinPriority     *int              `json:"min_priority"`
-	TagIDs          *[]int            `json:"tag_ids"`
-	ClaimedOnly     *bool             `json:"claimed_only"`
-	ClaimedIsMe     *bool             `json:"claimed_is_me"`
-	FieldKey        *string           `json:"field_key"`
-	FieldValue      *string           `json:"field_value"`
-	QuietHoursStart *string           `json:"quiet_hours_start"`
-	QuietHoursEnd   *string           `json:"quiet_hours_end"`
-	Digest          *string           `json:"digest"`
-	StatusIDs       *[]int            `json:"status_ids"`
-	StatusExcludeIDs *[]int           `json:"status_exclude_ids"`
-	MentionMap      map[string]string `json:"mention_map"`
-	WebhookURL      *string           `json:"webhook_url"`
-	NtfyAuth        *string           `json:"ntfy_auth"`
-	RotateSigning   *bool             `json:"rotate_signing"`
-	RotateCallback  *bool             `json:"rotate_callback"`
-	Values          map[string]string `json:"values"`
+	Enabled          *bool             `json:"enabled"`
+	Triggers         *[]string         `json:"triggers"`
+	Templates        map[string]string `json:"templates"`
+	StatusOnly       *bool             `json:"status_only"`
+	SkipSelf         *bool             `json:"skip_self"`
+	MinPriority      *int              `json:"min_priority"`
+	TagIDs           *[]int            `json:"tag_ids"`
+	ClaimedOnly      *bool             `json:"claimed_only"`
+	ClaimedIsMe      *bool             `json:"claimed_is_me"`
+	FieldKey         *string           `json:"field_key"`
+	FieldValue       *string           `json:"field_value"`
+	QuietHoursStart  *string           `json:"quiet_hours_start"`
+	QuietHoursEnd    *string           `json:"quiet_hours_end"`
+	Digest           *string           `json:"digest"`
+	StatusIDs        *[]int            `json:"status_ids"`
+	StatusExcludeIDs *[]int            `json:"status_exclude_ids"`
+	MentionMap       map[string]string `json:"mention_map"`
+	WebhookURL       *string           `json:"webhook_url"`
+	NtfyAuth         *string           `json:"ntfy_auth"`
+	RotateSigning    *bool             `json:"rotate_signing"`
+	RotateCallback   *bool             `json:"rotate_callback"`
+	Values           map[string]string `json:"values"`
 }
 
 func apiV1ProjectExtensions(w http.ResponseWriter, r *http.Request, projectID int, rest []string) {
@@ -120,6 +120,10 @@ func apiV1ProjectExtensions(w http.ResponseWriter, r *http.Request, projectID in
 	}
 	if rest[1] == "ui" {
 		projectExtensionUI(w, r, projectID, extensionID, rest[2:])
+		return
+	}
+	if rest[1] == "store" {
+		projectExtensionStore(w, r, projectID, extensionID, userID, rest[2:])
 		return
 	}
 	if rest[1] == "test" && len(rest) == 2 {
@@ -673,17 +677,31 @@ func projectExtensionUI(w http.ResponseWriter, r *http.Request, projectID int, e
 		utils.APIJSONError(w, http.StatusInternalServerError, "internal_error", "Failed to load extension settings.")
 		return
 	}
-	if !visible || !e.Manifest.HasUI() {
+	if !visible || (!e.Manifest.HasUI() && !e.Manifest.HasSurfaces()) {
 		utils.APIJSONError(w, http.StatusNotFound, "not_found", "Extension UI not found.")
 		return
 	}
-	ui := strings.TrimSpace(e.Manifest.UI)
-	rel := ui
+	rel := strings.TrimSpace(e.Manifest.UI)
+	if surfaceID := strings.TrimSpace(r.URL.Query().Get("surface")); surfaceID != "" {
+		s, ok := e.Manifest.SurfaceByID(surfaceID)
+		if !ok {
+			utils.APIJSONError(w, http.StatusNotFound, "not_found", "Extension UI not found.")
+			return
+		}
+		rel = s.File
+	} else if rel == "" {
+		surfaces := e.Manifest.ResolvedSurfaces()
+		if len(surfaces) == 0 {
+			utils.APIJSONError(w, http.StatusNotFound, "not_found", "Extension UI not found.")
+			return
+		}
+		rel = surfaces[0].File
+	}
 	asPanel := true
 	if len(extra) > 0 {
 		asPanel = false
 		joined := strings.Trim(strings.Join(extra, "/"), "/")
-		base := strings.TrimSuffix(strings.ReplaceAll(ui, "\\", "/"), "/")
+		base := strings.TrimSuffix(strings.ReplaceAll(rel, "\\", "/"), "/")
 		if i := strings.LastIndex(base, "/"); i >= 0 {
 			base = base[:i]
 		} else {
@@ -697,4 +715,85 @@ func projectExtensionUI(w http.ResponseWriter, r *http.Request, projectID int, e
 	}
 	_ = projectID
 	serveExtensionFile(w, r, e.Dir, rel, asPanel)
+}
+
+type extensionStorePutBody struct {
+	Revision int             `json:"revision"`
+	Value    json.RawMessage `json:"value"`
+}
+
+func projectExtensionStore(w http.ResponseWriter, r *http.Request, projectID int, extensionID string, userID int, extra []string) {
+	if len(extra) == 0 {
+		if r.Method != http.MethodGet {
+			utils.APIJSONError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Method not allowed.")
+			return
+		}
+		keys, err := domain.ListExtensionStoreKeys(userID, projectID, extensionID)
+		if err != nil {
+			writeExtensionStoreError(w, err)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		_ = json.NewEncoder(w).Encode(map[string]any{"keys": keys})
+		return
+	}
+	key := strings.Trim(strings.Join(extra, "/"), "/")
+	switch r.Method {
+	case http.MethodGet:
+		doc, err := domain.GetExtensionStoreDoc(userID, projectID, extensionID, key)
+		if err != nil {
+			writeExtensionStoreError(w, err)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		_ = json.NewEncoder(w).Encode(doc)
+	case http.MethodPut:
+		var body extensionStorePutBody
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			utils.APIJSONError(w, http.StatusBadRequest, "invalid_request", "Invalid JSON.")
+			return
+		}
+		revision := body.Revision
+		if match := strings.TrimSpace(r.Header.Get("If-Match")); match != "" {
+			n, err := strconv.Atoi(match)
+			if err != nil || n < 0 {
+				utils.APIJSONError(w, http.StatusBadRequest, "invalid_request", "If-Match must be a revision number.")
+				return
+			}
+			revision = n
+		}
+		doc, err := domain.PutExtensionStoreDoc(userID, projectID, extensionID, key, revision, body.Value)
+		if err != nil {
+			writeExtensionStoreError(w, err)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		_ = json.NewEncoder(w).Encode(doc)
+	default:
+		utils.APIJSONError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Method not allowed.")
+	}
+}
+
+func writeExtensionStoreError(w http.ResponseWriter, err error) {
+	var conflict *domain.StoreConflictError
+	if errors.As(err, &conflict) {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(http.StatusConflict)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"error":   "conflict",
+			"message": "Store revision does not match.",
+			"current": conflict.Current,
+		})
+		return
+	}
+	switch {
+	case errors.Is(err, domain.ErrNotFound):
+		utils.APIJSONError(w, http.StatusNotFound, "not_found", "Not found.")
+	case errors.Is(err, domain.ErrForbidden):
+		utils.APIJSONError(w, http.StatusForbidden, "forbidden", "You cannot access this extension store.")
+	case errors.Is(err, domain.ErrValidation):
+		utils.APIJSONError(w, http.StatusBadRequest, "invalid_request", err.Error())
+	default:
+		utils.APIJSONError(w, http.StatusInternalServerError, "internal_error", "Request failed.")
+	}
 }

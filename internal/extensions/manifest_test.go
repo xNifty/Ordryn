@@ -134,6 +134,79 @@ func TestValidateManifestHostAPITooNew(t *testing.T) {
 	}
 }
 
+func TestValidateManifestSurfacesAndStoreRequireHostAPI2(t *testing.T) {
+	m := Manifest{
+		ID:      "pad",
+		Name:    "Pad",
+		Version: "1.0.0",
+		HostAPI: 1,
+		UI:      "panel.html",
+		Surfaces: []Surface{
+			{ID: "board", File: "board.html", At: SurfaceKanbanTab, Label: "Pad"},
+		},
+		Permissions: []string{PermStoreRead, PermStoreWrite},
+	}
+	err := ValidateManifest("pad", m)
+	if err == nil || !strings.Contains(err.Error(), "host_api 2") {
+		t.Fatalf("err=%v", err)
+	}
+	m.HostAPI = 2
+	if err := ValidateManifest("pad", m); err != nil {
+		t.Fatal(err)
+	}
+	if !m.HasSurfaces() || !m.HasProjectSurface() {
+		t.Fatal("expected kanban.tab to be a project surface")
+	}
+	tabs := m.SurfacesAt(SurfaceKanbanTab)
+	if len(tabs) != 1 || tabs[0].File != "board.html" {
+		t.Fatalf("tabs=%v", tabs)
+	}
+	settings := m.SurfacesAt(SurfaceProjectExtensions)
+	if len(settings) != 1 || settings[0].File != "panel.html" {
+		t.Fatalf("settings surface=%v", settings)
+	}
+}
+
+func TestValidateManifestUnknownSurfaceAt(t *testing.T) {
+	m := Manifest{
+		ID: "pad", Name: "Pad", Version: "1", HostAPI: 2,
+		Surfaces: []Surface{{ID: "x", File: "x.html", At: "task.sidebar"}},
+	}
+	err := ValidateManifest("pad", m)
+	if err == nil || !strings.Contains(err.Error(), "unknown surfaces.at") {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestValidateManifestDuplicateSurfaceID(t *testing.T) {
+	m := Manifest{
+		ID: "pad", Name: "Pad", Version: "1", HostAPI: 2, UI: "panel.html",
+		Surfaces: []Surface{
+			{ID: "board", File: "a.html", At: SurfaceKanbanTab},
+			{ID: "board", File: "b.html", At: SurfaceKanbanTab},
+		},
+	}
+	err := ValidateManifest("pad", m)
+	if err == nil || !strings.Contains(err.Error(), "duplicate surfaces id") {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestValidateManifestKanbanTabRequiresProjectSurface(t *testing.T) {
+	m := Manifest{
+		ID: "pad", Name: "Pad", Version: "1", HostAPI: 2,
+		Surfaces: []Surface{{ID: "board", File: "board.html", At: SurfaceKanbanTab}},
+	}
+	err := ValidateManifest("pad", m)
+	if err == nil || !strings.Contains(err.Error(), "kanban.tab requires") {
+		t.Fatalf("err=%v", err)
+	}
+	m.UI = "panel.html"
+	if err := ValidateManifest("pad", m); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestValidateManifestMissingName(t *testing.T) {
 	m := validDiscord()
 	m.Name = "  "
@@ -614,6 +687,150 @@ func TestExampleFieldsManifestsValidate(t *testing.T) {
 				t.Fatal("fields-demo should include date and markdown fields")
 			}
 		}
+	}
+}
+
+func TestExampleStandupManifestValidate(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "examples", "extensions", "standup", "manifest.json"))
+	if err != nil {
+		raw, err = os.ReadFile(filepath.Join("..", "..", "data", "extensions", "standup", "manifest.json"))
+	}
+	if err != nil {
+		t.Skipf("standup example not present: %v", err)
+	}
+	var m Manifest
+	if err := json.Unmarshal(raw, &m); err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateManifest("standup", m); err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(m.UI) != "panel.html" || strings.TrimSpace(m.Icon) == "" {
+		t.Fatal("standup should declare panel.html ui and an icon")
+	}
+	if !m.HasUI() || !m.HasProjectSurface() {
+		t.Fatal("standup should appear on the project Extensions tab via ui")
+	}
+	if m.Delivery != nil {
+		t.Fatal("standup should be UI-first (no outbound delivery)")
+	}
+	if !m.HasCallbackPermissions() || !m.DeclaresAction(ActionComment) || !m.DeclaresAction(ActionSetField) {
+		t.Fatal("standup should declare callback permissions and inbound comment/set_field")
+	}
+	var sawDate, sawMarkdown bool
+	for _, f := range m.Fields {
+		if f.Type == "date" && f.Key == "last" {
+			sawDate = true
+		}
+		if f.Type == "markdown" && f.Key == "notes" {
+			sawMarkdown = true
+		}
+	}
+	if !sawDate || !sawMarkdown {
+		t.Fatal("standup should register standup.last and standup.notes")
+	}
+	uiPath := filepath.Join("..", "..", "data", "extensions", "standup", "panel.html")
+	if _, err := os.Stat(uiPath); err != nil {
+		uiPath = filepath.Join("..", "..", "examples", "extensions", "standup", "panel.html")
+		if _, err := os.Stat(uiPath); err != nil {
+			t.Fatal("standup panel.html is missing")
+		}
+	}
+}
+
+func TestLoadStandupExample(t *testing.T) {
+	src := filepath.Join("..", "..", "data", "extensions", "standup")
+	if _, err := os.Stat(filepath.Join(src, "manifest.json")); err != nil {
+		src = filepath.Join("..", "..", "examples", "extensions", "standup")
+		if _, err := os.Stat(filepath.Join(src, "manifest.json")); err != nil {
+			t.Skipf("standup example not present: %v", err)
+		}
+	}
+	root := t.TempDir()
+	dst := filepath.Join(root, "standup")
+	if err := os.Mkdir(dst, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"manifest.json", "panel.html", "icon.svg"} {
+		raw, err := os.ReadFile(filepath.Join(src, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dst, name), raw, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("EXTENSIONS_DIR", root)
+	Load()
+	e, ok := Get("standup")
+	if !ok || !e.Loaded {
+		t.Fatalf("standup not loaded: %#v ok=%v", e, ok)
+	}
+	if e.Manifest.UI != "panel.html" || !e.Manifest.HasUI() {
+		t.Fatalf("standup ui=%q loaded with error %q", e.Manifest.UI, e.Error)
+	}
+}
+
+func TestExampleRetroManifestValidate(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "examples", "extensions", "retro", "manifest.json"))
+	if err != nil {
+		raw, err = os.ReadFile(filepath.Join("..", "..", "data", "extensions", "retro", "manifest.json"))
+	}
+	if err != nil {
+		t.Skipf("retro example not present: %v", err)
+	}
+	var m Manifest
+	if err := json.Unmarshal(raw, &m); err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateManifest("retro", m); err != nil {
+		t.Fatal(err)
+	}
+	if m.HostAPI != 2 {
+		t.Fatalf("host_api=%d", m.HostAPI)
+	}
+	if !m.HasPermission(PermStoreRead) || !m.HasPermission(PermStoreWrite) {
+		t.Fatal("retro should declare store permissions")
+	}
+	if m.HasCallbackPermissions() {
+		t.Fatal("store permissions should not mint callback tokens")
+	}
+	tabs := m.SurfacesAt(SurfaceKanbanTab)
+	if len(tabs) != 1 || tabs[0].ID != "board" || tabs[0].File != "board.html" {
+		t.Fatalf("kanban tab=%v", tabs)
+	}
+}
+
+func TestLoadRetroExample(t *testing.T) {
+	src := filepath.Join("..", "..", "data", "extensions", "retro")
+	if _, err := os.Stat(filepath.Join(src, "manifest.json")); err != nil {
+		src = filepath.Join("..", "..", "examples", "extensions", "retro")
+		if _, err := os.Stat(filepath.Join(src, "manifest.json")); err != nil {
+			t.Skipf("retro example not present: %v", err)
+		}
+	}
+	root := t.TempDir()
+	dst := filepath.Join(root, "retro")
+	if err := os.Mkdir(dst, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"manifest.json", "panel.html", "board.html", "icon.svg"} {
+		raw, err := os.ReadFile(filepath.Join(src, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dst, name), raw, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("EXTENSIONS_DIR", root)
+	Load()
+	e, ok := Get("retro")
+	if !ok || !e.Loaded {
+		t.Fatalf("retro not loaded: %#v ok=%v", e, ok)
+	}
+	if len(e.Manifest.SurfacesAt(SurfaceKanbanTab)) != 1 {
+		t.Fatal("retro should expose a kanban.tab surface")
 	}
 }
 

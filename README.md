@@ -34,9 +34,9 @@ Published versions: [GitHub Releases](https://github.com/SentientTD-Studios/Ordr
 
 Ordryn loads folders from `data/extensions/` (or `EXTENSIONS_DIR`) at startup. Each folder is one extension. Copy examples from `examples/extensions/` (or keep a local copy under `data/extensions/`), enable them in **Admin → Extensions**, then configure destinations on the project **Extensions** tab.
 
-Bundled examples cover chat destinations (Discord, Slack, Teams, Google Chat, ntfy, generic webhook, email relay), focused hooks (due-dates including `task.due_soon`, comments + mentions, claimed, activity, lifecycle, join-requests), a personal **Mentions** ntfy destination, **Callback bot** (sandboxed panel, callback tokens, inbound `complete`/`set_field`), and custom fields (`severity`, `estimate`, `fields-demo` including `date` and `markdown`).
+Bundled examples cover chat destinations (Discord, Slack, Teams, Google Chat, ntfy, generic webhook, email relay), focused hooks (due-dates including `task.due_soon`, comments + mentions, claimed, activity, lifecycle, join-requests), a personal **Mentions** ntfy destination, **Standup** (sandboxed daily check-in panel), **Retro** (kanban-tab retrospective using the document store), **Callback bot** (sandboxed panel, callback tokens, inbound `complete`/`set_field`), and custom fields (`severity`, `estimate`, `fields-demo` including `date` and `markdown`).
 
-A `manifest.json` is the whole contract (`host_api` 1). No JavaScript or WASM plugin runtime: Ordryn delivers events to Discord, Slack, Teams, Google Chat, ntfy, or a generic HTTPS webhook, optionally serves a sandboxed HTML panel, and can accept inbound actions.
+A `manifest.json` is the whole contract (`host_api` 1 or 2). No JavaScript or WASM plugin runtime: Ordryn delivers events to Discord, Slack, Teams, Google Chat, ntfy, or a generic HTTPS webhook, optionally serves a sandboxed HTML panel (including a kanban tab in host API 2), and can accept inbound actions.
 
 ### Identity
 
@@ -79,7 +79,9 @@ Custom field types: `string`, `number`, `boolean`, `enum`, `url`, `user`, `date`
 
 ### Sandboxed UI
 
-Set `ui` to an HTML file in the folder. Project members see it in an iframe (`sandbox` without `allow-same-origin`, so it cannot read the session). Extra files next to that HTML are served under `/api/v2/projects/{id}/extensions/{id}/ui/…`. Do not put secrets in the panel; use outbound JSON callbacks instead.
+Set `ui` to an HTML file in the folder. Project members see it in an iframe (`sandbox` without `allow-same-origin`, so it cannot read the session). Extra files next to that HTML are served under `/api/v2/projects/{id}/extensions/{id}/ui/…`. Do not put secrets in the panel; use outbound JSON callbacks instead. The **Standup** example is a working check-in worksheet in that iframe.
+
+Host API 2 adds `surfaces` so a panel can also sit on the kanban board (`at: "kanban.tab"`). Those frames still cannot read the session. The parent SPA forwards `store.get` / `store.put` / `store.list` over `postMessage` to `GET`/`PUT /api/v2/projects/{id}/extensions/{id}/store/{key}` (64 KiB JSON, optimistic `revision`, SSE `extension.store`). Permissions: `store:read`, `store:write` (viewers are read-only). The **Retro** example is a Went well / Improve / Actions board keyed to the sprint switcher.
 
 ### Callback tokens and inbound actions
 
