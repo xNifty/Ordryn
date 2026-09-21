@@ -6203,6 +6203,9 @@ components:
         created_at:
           type: string
           format: date-time
+        next_attempt_at:
+          type: string
+          format: date-time
 
     ProjectInboundWebhook:
       type: object

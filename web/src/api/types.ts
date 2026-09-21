@@ -644,6 +644,7 @@ export type ExtensionDelivery = {
   error?: string
   attempts: number
   created_at: string
+  next_attempt_at?: string
 }
 
 export type ProjectExtensionSettings = {
