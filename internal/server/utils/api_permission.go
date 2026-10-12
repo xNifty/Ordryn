@@ -7,6 +7,7 @@ import (
 )
 
 // RequireAPIPermission ensures the authenticated API user has a named permission.
+// Permissions are read live so a role change takes effect without a new login.
 func RequireAPIPermission(permission string, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID, ok := GetAPIUserID(r)
@@ -15,18 +16,11 @@ func RequireAPIPermission(permission string, next http.HandlerFunc) http.Handler
 			return
 		}
 
-		perms := []string{}
-		if _, _, sessionPerms, loggedIn := GetSessionUser(r); loggedIn {
-			perms = sessionPerms
-		} else {
-			profile, err := storage.GetUserProfileByID(userID)
-			if err != nil {
-				APIJSONError(w, http.StatusInternalServerError, "internal_error", "Failed to load permissions.")
-				return
-			}
-			perms = profile.Permissions
+		perms, err := storage.GetUserPermissions(userID)
+		if err != nil {
+			APIJSONError(w, http.StatusInternalServerError, "internal_error", "Failed to load permissions.")
+			return
 		}
-
 		for _, p := range perms {
 			if p == permission {
 				next(w, r)
@@ -52,18 +46,11 @@ func InviteAPIChain(handler http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		perms := []string{}
-		if _, _, sessionPerms, loggedIn := GetSessionUser(r); loggedIn {
-			perms = sessionPerms
-		} else {
-			profile, err := storage.GetUserProfileByID(userID)
-			if err != nil {
-				APIJSONError(w, http.StatusInternalServerError, "internal_error", "Failed to load permissions.")
-				return
-			}
-			perms = profile.Permissions
+		perms, err := storage.GetUserPermissions(userID)
+		if err != nil {
+			APIJSONError(w, http.StatusInternalServerError, "internal_error", "Failed to load permissions.")
+			return
 		}
-
 		for _, p := range perms {
 			if p == "createinvites" || p == "admin" {
 				handler(w, r)

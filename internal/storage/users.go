@@ -11,6 +11,8 @@ type UserSummary struct {
 	Email    string
 	UserName string
 	IsBanned bool
+	RoleID   int
+	RoleName string
 }
 
 // ListUsers returns all registered users ordered by id. AI agent accounts are
@@ -23,8 +25,11 @@ func ListUsers() ([]UserSummary, error) {
 	defer CloseDatabase(pool)
 
 	rows, err := pool.Query(context.Background(),
-		`SELECT id, email, COALESCE(user_name, ''), COALESCE(is_banned, FALSE)
-		 FROM users WHERE NOT COALESCE(is_agent, FALSE) ORDER BY id ASC`)
+		`SELECT u.id, u.email, COALESCE(u.user_name, ''), COALESCE(u.is_banned, FALSE),
+		        u.role_id, COALESCE(r.name, '')
+		 FROM users u
+		 LEFT JOIN roles r ON r.id = u.role_id
+		 WHERE NOT COALESCE(u.is_agent, FALSE) ORDER BY u.id ASC`)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list users: %v", err)
 	}
@@ -33,7 +38,7 @@ func ListUsers() ([]UserSummary, error) {
 	var out []UserSummary
 	for rows.Next() {
 		var u UserSummary
-		if err := rows.Scan(&u.ID, &u.Email, &u.UserName, &u.IsBanned); err != nil {
+		if err := rows.Scan(&u.ID, &u.Email, &u.UserName, &u.IsBanned, &u.RoleID, &u.RoleName); err != nil {
 			return nil, err
 		}
 		out = append(out, u)

@@ -637,6 +637,8 @@ func APIV1AdminUsersRouter(w http.ResponseWriter, r *http.Request) {
 				"email":     u.Email,
 				"user_name": u.UserName,
 				"is_banned": u.IsBanned,
+				"role_id":   u.RoleID,
+				"role_name": u.RoleName,
 			})
 		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -684,6 +686,13 @@ func APIV1AdminUsersRouter(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			apiV1AdminSetUsername(w, r, id)
+			return
+		case "role":
+			if r.Method != http.MethodPut {
+				utils.APIJSONError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Method not allowed.")
+				return
+			}
+			apiV1AdminSetUserSiteRole(w, r, id)
 			return
 		default:
 			utils.APIJSONError(w, http.StatusNotFound, "not_found", "Unknown action.")

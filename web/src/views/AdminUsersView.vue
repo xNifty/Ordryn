@@ -1,15 +1,20 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { RouterLink } from 'vue-router'
 import { api } from '@/api/client'
-import type { AdminUser } from '@/api/types'
+import type { AdminUser, SiteRole } from '@/api/types'
 import { APIError } from '@/api/types'
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
+import { useAuth } from '@/composables/useAuth'
+import { siteRoleLabel } from '@/utils/siteRoles'
 import AdminSubnav from '@/components/AdminSubnav.vue'
 
 const toast = useToast()
 const { askConfirm } = useConfirm()
+const { user: me } = useAuth()
 const users = ref<AdminUser[]>([])
+const siteRoles = ref<SiteRole[]>([])
 const search = ref('')
 const editingUsernameId = ref<number | null>(null)
 const editUsernameValue = ref('')
@@ -26,9 +31,46 @@ const filteredUsers = computed(() => {
 
 async function load() {
   try {
-    users.value = await api.listAdminUsers()
+    const [list, roles] = await Promise.all([api.listAdminUsers(), api.listSiteRoles()])
+    users.value = list
+    siteRoles.value = roles.roles || []
   } catch (err) {
     toast.push(err instanceof APIError ? err.message : 'Failed to load users', 'error')
+  }
+}
+
+function grantsAdmin(roleId: number) {
+  return !!siteRoles.value.find((r) => r.id === roleId)?.permissions.includes('admin')
+}
+
+async function changeRole(user: AdminUser, event: Event) {
+  const select = event.target as HTMLSelectElement
+  const roleId = Number(select.value)
+  const next = siteRoles.value.find((r) => r.id === roleId)
+  if (!next || roleId === user.role_id) return
+  const who = user.user_name || user.email
+  // Gaining or losing admin is the one change worth a second look.
+  if (grantsAdmin(roleId) !== grantsAdmin(user.role_id)) {
+    const ok = await askConfirm({
+      title: grantsAdmin(roleId) ? 'Make admin?' : 'Remove admin?',
+      message: grantsAdmin(roleId)
+        ? `${who} will be able to change every site setting, role, and account.`
+        : `${who} will lose access to the admin area.`,
+      confirmLabel: grantsAdmin(roleId) ? 'Make admin' : 'Remove admin',
+      danger: true,
+    })
+    if (!ok) {
+      select.value = String(user.role_id)
+      return
+    }
+  }
+  try {
+    await api.setAdminUserRole(user.id, roleId)
+    toast.push(`${who} is now ${siteRoleLabel(next.name)}`, 'success')
+    await load()
+  } catch (err) {
+    select.value = String(user.role_id)
+    toast.push(err instanceof APIError ? err.message : 'Could not change role', 'error')
   }
 }
 
@@ -89,7 +131,9 @@ onMounted(load)
   <div class="container mt-3">
     <AdminSubnav />
     <h1>Users</h1>
-    <p class="text-muted">Search, rename, or ban accounts on this site.</p>
+    <p class="text-muted">
+      Search, rename, ban, or change the <RouterLink to="/admin/site-roles">site role</RouterLink> of accounts on this site.
+    </p>
 
     <div class="mb-3" style="max-width: 28rem">
       <label for="admin-user-search" class="form-label">Search</label>
@@ -137,14 +181,28 @@ onMounted(load)
                 <span v-if="user.is_banned">· banned</span>
               </div>
             </div>
-            <button
-              type="button"
-              class="btn btn-sm"
-              :class="user.is_banned ? 'btn-outline-secondary' : 'btn-outline-danger'"
-              @click="toggleBan(user)"
-            >
-              {{ user.is_banned ? 'Unban' : 'Ban' }}
-            </button>
+            <div class="d-flex align-items-center gap-2">
+              <label class="visually-hidden" :for="`admin-user-role-${user.id}`">Site role</label>
+              <select
+                :id="`admin-user-role-${user.id}`"
+                class="form-select form-select-sm"
+                style="width: auto"
+                :value="user.role_id"
+                :disabled="user.id === me?.id"
+                :title="user.id === me?.id ? 'You can\'t change your own role' : 'Site role'"
+                @change="changeRole(user, $event)"
+              >
+                <option v-for="role in siteRoles" :key="role.id" :value="role.id">{{ siteRoleLabel(role.name) }}</option>
+              </select>
+              <button
+                type="button"
+                class="btn btn-sm"
+                :class="user.is_banned ? 'btn-outline-secondary' : 'btn-outline-danger'"
+                @click="toggleBan(user)"
+              >
+                {{ user.is_banned ? 'Unban' : 'Ban' }}
+              </button>
+            </div>
           </div>
         </li>
         <li v-if="!filteredUsers.length" class="list-group-item text-muted">

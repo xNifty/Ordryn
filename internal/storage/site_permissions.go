@@ -36,6 +36,30 @@ func UserHasSitePermission(userID int, perm string) bool {
 	return err == nil && has
 }
 
+// GetUserPermissions returns the live permissions of the user's site role. Sessions
+// cache permissions at login, so authorization checks must use this instead.
+func GetUserPermissions(userID int) ([]string, error) {
+	pool, err := OpenDatabase()
+	if err != nil {
+		return nil, err
+	}
+	defer CloseDatabase(pool)
+
+	var perms []string
+	err = pool.QueryRow(context.Background(), `
+		SELECT COALESCE(r.permissions, '{}')
+		FROM users u
+		LEFT JOIN roles r ON r.id = u.role_id
+		WHERE u.id = $1`, userID).Scan(&perms)
+	if err != nil {
+		return nil, err
+	}
+	if perms == nil {
+		perms = []string{}
+	}
+	return perms, nil
+}
+
 // RoleHasPermission reports whether the named site role grants perm. A missing role grants nothing.
 func RoleHasPermission(roleName, perm string) (bool, error) {
 	pool, err := OpenDatabase()

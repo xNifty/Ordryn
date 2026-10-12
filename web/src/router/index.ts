@@ -191,6 +191,12 @@ const router = createRouter({
       meta: { requiresAuth: true, permission: 'admin' },
     },
     {
+      path: '/admin/site-roles',
+      name: 'admin-site-roles',
+      component: () => import('@/views/AdminSiteRolesView.vue'),
+      meta: { requiresAuth: true, permission: 'admin' },
+    },
+    {
       path: '/admin/audit',
       name: 'admin-audit',
       component: () => import('@/views/AdminAuditView.vue'),

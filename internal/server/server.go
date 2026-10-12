@@ -199,6 +199,8 @@ func registerAPIV1Routes() {
 	handleAPI("/admin/image-hosting/test", utils.AdminAPIChain(handlers.APIV1AdminImageHostingTest))
 	handleAPI("/admin/users", utils.AdminAPIChain(handlers.APIV1AdminUsersRouter))
 	handleAPI("/admin/users/", utils.AdminAPIChain(handlers.APIV1AdminUsersRouter))
+	handleAPI("/admin/site-roles", utils.AdminAPIChain(handlers.APIV1AdminSiteRolesRouter))
+	handleAPI("/admin/site-roles/", utils.AdminAPIChain(handlers.APIV1AdminSiteRolesRouter))
 	handleAPI("/admin/join-requests", utils.AdminAPIChain(handlers.APIV1AdminJoinRequestsRouter))
 	handleAPI("/admin/join-requests/", utils.AdminAPIChain(handlers.APIV1AdminJoinRequestsRouter))
 	handleAPI("/admin/invites", utils.AdminAPIChain(handlers.APIV1AdminInvitesRouter))

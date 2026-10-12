@@ -285,6 +285,10 @@ func TestMain(m *testing.M) {
 		fmt.Fprintf(os.Stderr, "api keys: %v\n", err)
 		os.Exit(1)
 	}
+	if err := storage.MigrateUsersAddIsBanned(); err != nil {
+		fmt.Fprintf(os.Stderr, "users.is_banned: %v\n", err)
+		os.Exit(1)
+	}
 	if err := storage.MigrateUsersAddIsAgent(); err != nil {
 		fmt.Fprintf(os.Stderr, "users.is_agent: %v\n", err)
 		os.Exit(1)

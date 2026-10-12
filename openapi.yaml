@@ -6382,6 +6382,151 @@ paths:
         "409":
           $ref: "#/components/responses/APIError"
 
+  /api/v2/admin/users/{id}/role:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    put:
+      tags: [Admin]
+      summary: Assign a user's site role
+      description: |
+        Takes effect on the user's next request; no new login is needed. Admins can't change
+        their own role, the site must keep at least one admin, and agent and automation
+        accounts can't be reassigned.
+      security:
+        - SessionCookie: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role_id]
+              properties:
+                role_id:
+                  type: integer
+      responses:
+        "200":
+          description: Role assigned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  role_id:
+                    type: integer
+                  role_name:
+                    type: string
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/v2/admin/site-roles:
+    get:
+      tags: [Admin]
+      summary: List site roles and the site permission catalog
+      description: |
+        Site roles control site-wide abilities such as creating projects or organizations.
+        They are separate from project and organization roles. The built-in Admin role has
+        every permission and is locked; the built-in User role is the default for new accounts.
+      security:
+        - SessionCookie: []
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Catalog plus roles (Admin, User, then custom roles by name)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SiteRolesList"
+    post:
+      tags: [Admin]
+      summary: Create a custom site role
+      security:
+        - SessionCookie: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SiteRoleWrite"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SiteRole"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /api/v2/admin/site-roles/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ID"
+    patch:
+      tags: [Admin]
+      summary: Rename a site role or set its permissions
+      description: |
+        `permissions` replaces the role's catalog permissions; permissions outside the catalog
+        are kept. The Admin role can't be edited and the User role can't be renamed.
+      security:
+        - SessionCookie: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SiteRoleWrite"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SiteRole"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Admin]
+      summary: Delete a custom site role
+      description: Accounts on the role move to the User role.
+      security:
+        - SessionCookie: []
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  users_moved:
+                    type: integer
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
   /api/v2/admin/email-audit:
     get:
       tags: [Admin]
@@ -6448,7 +6593,8 @@ paths:
       description: |
         One newest-first view over task events, project events, comment revisions,
         outbound email attempts, and site-admin actions (bans, username changes,
-        site settings, role templates, invites, join requests, extensions).
+        site roles and role assignments, site settings, role templates, invites,
+        join requests, extensions).
         Change events carry `metadata.from` / `metadata.to`; site settings changes
         carry `metadata.changes` keyed by field. Secret values are never recorded.
         Rows older than `audit_retention_days` (when non-zero) are deleted automatically.
@@ -10417,8 +10563,69 @@ components:
           type: string
         is_banned:
           type: boolean
+        role_id:
+          type: integer
+        role_name:
+          type: string
         interval:
           type: integer
+
+    SitePermInfo:
+      type: object
+      properties:
+        id:
+          type: string
+          enum: ["projects:create", "orgs:create", createinvites]
+        label:
+          type: string
+        description:
+          type: string
+        group:
+          type: string
+
+    SiteRole:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        permissions:
+          type: array
+          items:
+            type: string
+        user_count:
+          type: integer
+          description: Accounts on this role (agent accounts excluded)
+        built_in:
+          type: boolean
+          description: True for Admin and User, which can't be deleted
+        locked:
+          type: boolean
+          description: True for Admin, whose permissions can't be edited
+
+    SiteRolesList:
+      type: object
+      properties:
+        catalog:
+          type: array
+          items:
+            $ref: "#/components/schemas/SitePermInfo"
+        roles:
+          type: array
+          items:
+            $ref: "#/components/schemas/SiteRole"
+
+    SiteRoleWrite:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 50
+        permissions:
+          type: array
+          items:
+            type: string
 
     EmailAuditEntry:
       type: object

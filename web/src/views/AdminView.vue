@@ -317,7 +317,11 @@ onMounted(load)
           <div class="form-check mb-3">
             <input id="admin-members-create-orgs" v-model="settings.members_can_create_organizations" class="form-check-input" type="checkbox" />
             <label class="form-check-label" for="admin-members-create-orgs">Allow regular users to create organizations</label>
-            <div class="form-text">Admins can always create both. Turning these off doesn't affect existing projects or organizations.</div>
+            <div class="form-text">
+              These apply to the User role. Admins can always create both, and you can give other roles
+              these abilities on <RouterLink to="/admin/site-roles">Site roles</RouterLink>. Turning these off
+              doesn't affect existing projects or organizations.
+            </div>
           </div>
           <div class="row g-3 mb-3">
             <div class="col-sm-6">

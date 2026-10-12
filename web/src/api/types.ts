@@ -1018,6 +1018,29 @@ export type AdminUser = {
   email: string
   user_name: string
   is_banned: boolean
+  role_id: number
+  role_name: string
+}
+
+/** A site-wide role (Admin, User, or custom). Separate from project and organization roles. */
+export type SiteRole = {
+  id: number
+  name: string
+  permissions: string[]
+  user_count: number
+  built_in: boolean
+  /** Admin: permissions can't be edited. */
+  locked: boolean
+}
+
+export type SiteRolesList = {
+  catalog: ProjectPermInfo[]
+  roles: SiteRole[]
+}
+
+export type SiteRoleWrite = {
+  name?: string
+  permissions?: string[]
 }
 
 export type EmailAuditStatus = 'sent' | 'failed' | 'not_configured' | 'rate_limited'

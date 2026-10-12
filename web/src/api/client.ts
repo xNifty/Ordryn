@@ -3,6 +3,9 @@ import type {
   AdminSettings,
   AdminSettingsPatch,
   AdminUser,
+  SiteRole,
+  SiteRolesList,
+  SiteRoleWrite,
   AdminExtensionsList,
   AdminExtensionsReloadResponse,
   AdminExtension,
@@ -1501,6 +1504,35 @@ export const api = {
 
   unbanUser(id: number) {
     return request<{ ok: boolean }>(`/api/v2/admin/users/${id}/unban`, { method: 'POST' })
+  },
+
+  setAdminUserRole(id: number, role_id: number) {
+    return request<{ ok: boolean; role_id: number; role_name: string }>(`/api/v2/admin/users/${id}/role`, {
+      method: 'PUT',
+      body: JSON.stringify({ role_id }),
+    })
+  },
+
+  listSiteRoles() {
+    return request<SiteRolesList>('/api/v2/admin/site-roles')
+  },
+
+  createSiteRole(payload: SiteRoleWrite) {
+    return request<SiteRole>('/api/v2/admin/site-roles', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+  },
+
+  updateSiteRole(id: number, payload: SiteRoleWrite) {
+    return request<SiteRole>(`/api/v2/admin/site-roles/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    })
+  },
+
+  deleteSiteRole(id: number) {
+    return request<{ ok: boolean; users_moved: number }>(`/api/v2/admin/site-roles/${id}`, { method: 'DELETE' })
   },
 
   setAdminUsername(id: number, user_name: string) {
