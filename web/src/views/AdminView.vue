@@ -2,15 +2,19 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { api } from '@/api/client'
-import type { AdminSettings, AdminSettingsPatch } from '@/api/types'
+import type { AdminSettings, AdminSettingsPatch, SiteMode } from '@/api/types'
 import { APIError } from '@/api/types'
 import { useSite } from '@/composables/useSite'
 import { useToast } from '@/composables/useToast'
+import { useConfirm } from '@/composables/useConfirm'
 import TimezoneSelect from '@/components/TimezoneSelect.vue'
 import AdminSubnav from '@/components/AdminSubnav.vue'
 
 const toast = useToast()
+const { askConfirm } = useConfirm()
 const { refresh: refreshSite } = useSite()
+const siteModeChoice = ref<SiteMode>('multi')
+const siteModeBusy = ref(false)
 const busy = ref(false)
 const emailBusy = ref(false)
 const mailgunApiKeyInput = ref('')
@@ -32,6 +36,8 @@ const settings = reactive<AdminSettings>({
   allow_user_invites: false,
   members_can_create_projects: true,
   members_can_create_organizations: true,
+  site_mode: 'multi',
+  site_mode_locked: false,
   user_invite_limit: 5,
   invite_expiration_days: 7,
   max_description_length: 20000,
@@ -84,6 +90,7 @@ async function load() {
   try {
     const s = await api.getAdminSettings()
     Object.assign(settings, s)
+    siteModeChoice.value = s.site_mode
     mailgunApiKeyInput.value = ''
     smtpPasswordInput.value = ''
     githubOAuthSecretInput.value = ''
@@ -247,6 +254,34 @@ async function testImageHosting() {
   }
 }
 
+const siteModeLabels: Record<SiteMode, string> = {
+  multi: 'Multi-user',
+  company: 'Company',
+}
+
+async function saveSiteMode() {
+  if (siteModeChoice.value === settings.site_mode) return
+  const ok = await askConfirm({
+    title: `Switch to ${siteModeLabels[siteModeChoice.value]} mode?`,
+    message: 'You can change the mode again until the first project or organization is created. After that it is permanent.',
+    confirmLabel: 'Switch mode',
+  })
+  if (!ok) return
+  siteModeBusy.value = true
+  try {
+    const saved = await api.patchAdminSettings({ site_mode: siteModeChoice.value })
+    Object.assign(settings, saved)
+    siteModeChoice.value = saved.site_mode
+    await refreshSite()
+    toast.push(`Site mode set to ${siteModeLabels[saved.site_mode]}`, 'success')
+  } catch (err) {
+    siteModeChoice.value = settings.site_mode
+    toast.push(err instanceof APIError ? err.message : 'Could not change site mode', 'error')
+  } finally {
+    siteModeBusy.value = false
+  }
+}
+
 onMounted(load)
 </script>
 
@@ -254,6 +289,55 @@ onMounted(load)
   <div class="container mt-3">
     <AdminSubnav />
     <h1>Admin</h1>
+    <div class="card mb-4" :class="{ 'border-primary': !settings.site_mode_locked }">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <h2 class="h5 mb-0">Site mode</h2>
+        <span v-if="settings.site_mode_locked" class="badge text-bg-secondary">
+          <i class="bi bi-lock-fill" /> Locked
+        </span>
+      </div>
+      <div class="card-body">
+        <template v-if="settings.site_mode_locked">
+          <p class="mb-1"><strong>{{ siteModeLabels[settings.site_mode] }}</strong></p>
+          <p class="text-muted small mb-0">
+            The mode is permanent because this site already has projects or organizations. Changing it would
+            mean merging organizations and their roles, which can't be done safely.
+          </p>
+        </template>
+        <form v-else @submit.prevent="saveSiteMode">
+          <p class="small mb-3">
+            Choose how this site is organized <strong>before creating any projects or organizations</strong>.
+            After the first one exists, the mode is permanent.
+          </p>
+          <div class="form-check mb-2">
+            <input id="site-mode-multi" v-model="siteModeChoice" class="form-check-input" type="radio" value="multi" />
+            <label class="form-check-label" for="site-mode-multi">
+              <span class="fw-semibold">Multi-user</span>
+              <span class="d-block small text-muted">
+                Independent people and groups share the site. Anyone allowed to can create their own organizations.
+              </span>
+            </label>
+          </div>
+          <div class="form-check mb-3">
+            <input id="site-mode-company" v-model="siteModeChoice" class="form-check-input" type="radio" value="company" />
+            <label class="form-check-label" for="site-mode-company">
+              <span class="fw-semibold">Company</span>
+              <span class="d-block small text-muted">
+                The site is one company. Everyone joins it automatically, every project belongs to it, and admins
+                create teams inside it.
+              </span>
+            </label>
+          </div>
+          <button
+            class="btn btn-primary"
+            type="submit"
+            :disabled="siteModeBusy || siteModeChoice === settings.site_mode"
+          >
+            Save site mode
+          </button>
+        </form>
+      </div>
+    </div>
     <div class="card mb-4">
       <div class="card-header"><h2 class="h5 mb-0">Site settings</h2></div>
       <div class="card-body">

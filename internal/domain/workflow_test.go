@@ -174,6 +174,10 @@ func TestMain(m *testing.M) {
 		fmt.Fprintf(os.Stderr, "site settings: %v\n", err)
 		os.Exit(1)
 	}
+	if err := storage.MigrateSiteSettingsAddSiteMode(); err != nil {
+		fmt.Fprintf(os.Stderr, "site mode: %v\n", err)
+		os.Exit(1)
+	}
 	if err := storage.MigrateTasksAddTrash(); err != nil {
 		fmt.Fprintf(os.Stderr, "trash: %v\n", err)
 		os.Exit(1)

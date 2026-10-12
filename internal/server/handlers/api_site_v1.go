@@ -31,6 +31,7 @@ type apiSiteResponse struct {
 	MaxCommentLength         int    `json:"max_comment_length"`
 	AttachmentsEnabled       bool   `json:"attachments_enabled"`
 	AttachmentMaxBytes       int64  `json:"attachment_max_bytes"`
+	SiteMode                 string `json:"site_mode"`
 }
 
 // APIV1Site returns public site metadata for the SPA shell.
@@ -82,5 +83,6 @@ func APIV1Site(w http.ResponseWriter, r *http.Request) {
 		MaxCommentLength:         textLimits.Comment,
 		AttachmentsEnabled:       settings.AttachmentsEnabled,
 		AttachmentMaxBytes:       storage.ClampAttachmentMaxBytes(settings.AttachmentMaxBytes),
+		SiteMode:                 settings.SiteMode,
 	})
 }

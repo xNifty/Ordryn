@@ -115,24 +115,49 @@ func HasActiveAPIKeyNamed(userID int, name string) (bool, error) {
 	return true, nil
 }
 
+func defaultSiteSettings() SiteSettings {
+	return SiteSettings{
+		SiteName:           "GoTodo",
+		DefaultTimezone:    "America/New_York",
+		ShowChangelog:      true,
+		EnableRegistration: true,
+		InviteOnly:         true,
+		Email: mailer.Config{
+			SMTPPort: 587,
+			SMTPTLS:  true,
+		},
+	}
+}
+
+// EnsureSiteSettingsRow inserts the default settings row when none exists yet.
+// It never touches an existing row, even if reading it fails.
+func EnsureSiteSettingsRow() error {
+	pool, err := OpenDatabase()
+	if err != nil {
+		return err
+	}
+	defer CloseDatabase(pool)
+
+	var exists bool
+	if err := pool.QueryRow(context.Background(),
+		`SELECT EXISTS (SELECT 1 FROM site_settings WHERE id = 1)`).Scan(&exists); err != nil {
+		return err
+	}
+	if exists {
+		return nil
+	}
+	return UpsertSiteSettings(defaultSiteSettings())
+}
+
 // EnsureEnableAPI upserts site_settings with enable_api=true, preserving other fields when present.
 func EnsureEnableAPI() error {
-	s, err := GetSiteSettings()
-	if err != nil || s == nil {
-		s = &SiteSettings{
-			SiteName:           "GoTodo",
-			DefaultTimezone:    "America/New_York",
-			ShowChangelog:      true,
-			EnableRegistration: true,
-			InviteOnly:         true,
-			EnableAPI:          true,
-			Email: mailer.Config{
-				SMTPPort: 587,
-				SMTPTLS:  true,
-			},
-		}
-	} else {
-		s.EnableAPI = true
+	if err := EnsureSiteSettingsRow(); err != nil {
+		return err
 	}
+	s, err := GetSiteSettings()
+	if err != nil {
+		return err
+	}
+	s.EnableAPI = true
 	return UpsertSiteSettings(*s)
 }

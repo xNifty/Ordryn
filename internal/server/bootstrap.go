@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -17,11 +18,19 @@ const bootstrapAPIKeyName = "bootstrap"
 //	ORDRYN_BOOTSTRAP_ADMIN_EMAIL / ORDRYN_BOOTSTRAP_ADMIN_PASSWORD — create admin if missing
 //	ORDRYN_BOOTSTRAP_ENABLE_API=true — set site_settings.enable_api
 //	ORDRYN_BOOTSTRAP_CREATE_API_KEY=true — mint a named "bootstrap" API key (once) for that admin
+//	ORDRYN_BOOTSTRAP_SITE_MODE=multi|company — set the site mode while no projects or organizations exist
 func RunBootstrap() error {
 	email := strings.TrimSpace(config.BrandEnv("BOOTSTRAP_ADMIN_EMAIL"))
 	password := config.BrandEnv("BOOTSTRAP_ADMIN_PASSWORD")
 	enableAPI := strings.EqualFold(strings.TrimSpace(config.BrandEnv("BOOTSTRAP_ENABLE_API")), "true")
 	createKey := strings.EqualFold(strings.TrimSpace(config.BrandEnv("BOOTSTRAP_CREATE_API_KEY")), "true")
+	siteMode := strings.TrimSpace(config.BrandEnv("BOOTSTRAP_SITE_MODE"))
+
+	if siteMode != "" {
+		if err := bootstrapSiteMode(siteMode); err != nil {
+			return err
+		}
+	}
 
 	if email == "" && !enableAPI && !createKey {
 		return nil
@@ -97,5 +106,30 @@ func RunBootstrap() error {
 			record.ID, record.Name, plaintext)
 	}
 
+	return nil
+}
+
+// bootstrapSiteMode applies ORDRYN_BOOTSTRAP_SITE_MODE. Once the mode is locked a
+// different value only logs a warning, so leaving the variable set never blocks startup.
+func bootstrapSiteMode(raw string) error {
+	mode := storage.NormalizeSiteMode(raw)
+	if mode == "" {
+		return fmt.Errorf("ORDRYN_BOOTSTRAP_SITE_MODE must be multi or company, got %q", raw)
+	}
+	current, err := storage.GetSiteMode()
+	if err != nil {
+		return fmt.Errorf("bootstrap site mode lookup: %w", err)
+	}
+	if current == mode {
+		return nil
+	}
+	if err := storage.SetSiteMode(mode); err != nil {
+		if errors.Is(err, storage.ErrSiteModeLocked) {
+			fmt.Printf("Bootstrap: site mode is %q and locked because projects or organizations exist; ignoring ORDRYN_BOOTSTRAP_SITE_MODE=%s\n", current, mode)
+			return nil
+		}
+		return fmt.Errorf("bootstrap site mode: %w", err)
+	}
+	fmt.Printf("Bootstrap: site mode set to %q\n", mode)
 	return nil
 }

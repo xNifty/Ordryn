@@ -108,7 +108,7 @@ func TestAuditEventCSVRowEscapesFormulas(t *testing.T) {
 func TestSiteSettingsAuditDiffOmitsSecrets(t *testing.T) {
 	before := &storage.SiteSettings{SiteName: "Old", DefaultTimezone: "UTC", ImageS3SecretKeyEnc: "enc-a"}
 	after := &storage.SiteSettings{SiteName: "New", DefaultTimezone: "UTC", ImageS3SecretKeyEnc: "enc-b", AuditRetentionDays: 30}
-	changes := siteSettingsAuditDiff(before, after, memberCreatePerms{}, memberCreatePerms{})
+	changes := siteSettingsAuditDiff(before, after, adminSettingsExtras{}, adminSettingsExtras{})
 
 	name, ok := changes["site_name"].(map[string]interface{})
 	if !ok || name["from"] != "Old" || name["to"] != "New" {
@@ -132,8 +132,8 @@ func TestSiteSettingsAuditDiffOmitsSecrets(t *testing.T) {
 func TestSiteSettingsAuditDiffRecordsMemberCreatePerms(t *testing.T) {
 	s := &storage.SiteSettings{SiteName: "Site", DefaultTimezone: "UTC"}
 	changes := siteSettingsAuditDiff(s, s,
-		memberCreatePerms{Projects: true, Organizations: true},
-		memberCreatePerms{Projects: false, Organizations: true})
+		adminSettingsExtras{Projects: true, Organizations: true},
+		adminSettingsExtras{Projects: false, Organizations: true})
 
 	got, ok := changes["members_can_create_projects"].(map[string]interface{})
 	if !ok || got["from"] != true || got["to"] != false {

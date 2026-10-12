@@ -45,6 +45,10 @@ type adminSettingsJSON struct {
 	MembersCanCreateProjects      bool `json:"members_can_create_projects"`
 	MembersCanCreateOrganizations bool `json:"members_can_create_organizations"`
 
+	// SiteMode can change only while SiteModeLocked is false (no projects or organizations yet).
+	SiteMode       string `json:"site_mode"`
+	SiteModeLocked bool   `json:"site_mode_locked"`
+
 	EmailProvider           string `json:"email_provider"`
 	EmailFromAddress        string `json:"email_from_address"`
 	EmailFromName           string `json:"email_from_name"`
@@ -100,6 +104,8 @@ type adminSettingsPatch struct {
 	MembersCanCreateProjects      *bool `json:"members_can_create_projects"`
 	MembersCanCreateOrganizations *bool `json:"members_can_create_organizations"`
 
+	SiteMode *string `json:"site_mode"`
+
 	EmailProvider           *string `json:"email_provider"`
 	EmailFromAddress        *string `json:"email_from_address"`
 	EmailFromName           *string `json:"email_from_name"`
@@ -147,7 +153,7 @@ func apiV1GetAdminSettings(w http.ResponseWriter, r *http.Request) {
 		utils.APIJSONError(w, http.StatusInternalServerError, "internal_error", "Failed to load settings.")
 		return
 	}
-	perms, err := loadMemberCreatePerms()
+	perms, err := loadAdminSettingsExtras()
 	if err != nil {
 		utils.APIJSONError(w, http.StatusInternalServerError, "internal_error", "Failed to load settings.")
 		return
@@ -161,7 +167,7 @@ func apiV1PatchAdminSettings(w http.ResponseWriter, r *http.Request) {
 		utils.APIJSONError(w, http.StatusInternalServerError, "internal_error", "Failed to load settings.")
 		return
 	}
-	currentPerms, err := loadMemberCreatePerms()
+	currentPerms, err := loadAdminSettingsExtras()
 	if err != nil {
 		utils.APIJSONError(w, http.StatusInternalServerError, "internal_error", "Failed to load settings.")
 		return
@@ -393,6 +399,23 @@ func apiV1PatchAdminSettings(w http.ResponseWriter, r *http.Request) {
 		utils.APIJSONError(w, http.StatusBadRequest, "invalid_request", errMsg)
 		return
 	}
+	if req.SiteMode != nil {
+		mode := storage.NormalizeSiteMode(*req.SiteMode)
+		if mode == "" {
+			utils.APIJSONError(w, http.StatusBadRequest, "invalid_request", "site_mode must be multi or company.")
+			return
+		}
+		// Applied first so a locked mode refuses the whole request instead of saving half of it.
+		if err := storage.SetSiteMode(mode); err != nil {
+			if errors.Is(err, storage.ErrSiteModeLocked) {
+				utils.APIJSONError(w, http.StatusConflict, "conflict",
+					"The site mode can't change once projects or organizations exist.")
+				return
+			}
+			utils.APIJSONError(w, http.StatusInternalServerError, "internal_error", "Failed to save settings.")
+			return
+		}
+	}
 	if err := storage.UpsertSiteSettings(next); err != nil {
 		utils.APIJSONError(w, http.StatusInternalServerError, "internal_error", "Failed to save settings.")
 		return
@@ -408,7 +431,7 @@ func apiV1PatchAdminSettings(w http.ResponseWriter, r *http.Request) {
 	if saved == nil {
 		saved = &next
 	}
-	savedPerms, err := loadMemberCreatePerms()
+	savedPerms, err := loadAdminSettingsExtras()
 	if err != nil {
 		utils.APIJSONError(w, http.StatusInternalServerError, "internal_error", "Failed to load settings.")
 		return
@@ -422,8 +445,8 @@ func apiV1PatchAdminSettings(w http.ResponseWriter, r *http.Request) {
 
 // siteSettingsAuditDiff returns {field: {from, to}} for changed settings. Secret
 // values are never recorded; a rotated secret shows only {"changed": true}.
-func siteSettingsAuditDiff(before, after *storage.SiteSettings, beforePerms, afterPerms memberCreatePerms) map[string]interface{} {
-	toMap := func(s *storage.SiteSettings, p memberCreatePerms) map[string]interface{} {
+func siteSettingsAuditDiff(before, after *storage.SiteSettings, beforePerms, afterPerms adminSettingsExtras) map[string]interface{} {
+	toMap := func(s *storage.SiteSettings, p adminSettingsExtras) map[string]interface{} {
 		m := map[string]interface{}{}
 		if b, err := json.Marshal(adminSettingsView(s, p)); err == nil {
 			_ = json.Unmarshal(b, &m)
@@ -527,19 +550,24 @@ func taskTextLengthFromPatch(w http.ResponseWriter, field string, n int) (int, b
 	return n, true
 }
 
-// memberCreatePerms mirrors the create permissions on the member site role.
-type memberCreatePerms struct {
-	Projects      bool
-	Organizations bool
+// adminSettingsExtras holds admin settings that live outside site_settings' upserted
+// fields: create permissions on the member site role, and whether the site mode is locked.
+type adminSettingsExtras struct {
+	Projects       bool
+	Organizations  bool
+	SiteModeLocked bool
 }
 
-func loadMemberCreatePerms() (memberCreatePerms, error) {
-	var p memberCreatePerms
+func loadAdminSettingsExtras() (adminSettingsExtras, error) {
+	var p adminSettingsExtras
 	var err error
 	if p.Projects, err = storage.RoleHasPermission(storage.MemberRoleName, storage.SitePermProjectsCreate); err != nil {
 		return p, err
 	}
 	if p.Organizations, err = storage.RoleHasPermission(storage.MemberRoleName, storage.SitePermOrgsCreate); err != nil {
+		return p, err
+	}
+	if p.SiteModeLocked, err = storage.SiteModeLocked(); err != nil {
 		return p, err
 	}
 	return p, nil
@@ -559,12 +587,12 @@ func saveMemberCreatePerms(req adminSettingsPatch) error {
 	return nil
 }
 
-func writeAdminSettings(w http.ResponseWriter, s *storage.SiteSettings, perms memberCreatePerms) {
+func writeAdminSettings(w http.ResponseWriter, s *storage.SiteSettings, perms adminSettingsExtras) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	_ = json.NewEncoder(w).Encode(adminSettingsView(s, perms))
 }
 
-func adminSettingsView(s *storage.SiteSettings, perms memberCreatePerms) adminSettingsJSON {
+func adminSettingsView(s *storage.SiteSettings, perms adminSettingsExtras) adminSettingsJSON {
 	return adminSettingsJSON{
 		SiteName:                      s.SiteName,
 		DefaultTimezone:               s.DefaultTimezone,
@@ -589,6 +617,8 @@ func adminSettingsView(s *storage.SiteSettings, perms memberCreatePerms) adminSe
 		AttachmentMaxBytes:            storage.ClampAttachmentMaxBytes(s.AttachmentMaxBytes),
 		MembersCanCreateProjects:      perms.Projects,
 		MembersCanCreateOrganizations: perms.Organizations,
+		SiteMode:                      s.SiteMode,
+		SiteModeLocked:                perms.SiteModeLocked,
 		EmailProvider:                 s.Email.Provider,
 		EmailFromAddress:              s.Email.FromAddress,
 		EmailFromName:                 s.Email.FromName,

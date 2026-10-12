@@ -486,7 +486,11 @@ export type SiteInfo = {
   max_comment_length?: number
   attachments_enabled?: boolean
   attachment_max_bytes?: number
+  site_mode?: SiteMode
 }
+
+/** multi: anyone may create organizations. company: one company with admin-created teams. */
+export type SiteMode = 'multi' | 'company'
 
 export type ChangelogEntry = {
   version: string
@@ -699,6 +703,9 @@ export type AdminSettings = {
   attachment_max_bytes: number
   members_can_create_projects: boolean
   members_can_create_organizations: boolean
+  site_mode: SiteMode
+  /** True once projects or organizations exist; site_mode can no longer change. */
+  site_mode_locked: boolean
   allow_user_invites: boolean
   user_invite_limit: number
   invite_expiration_days: number
@@ -732,7 +739,7 @@ export type AdminSettings = {
 }
 
 /** Write-only secret fields accepted by PATCH /admin/settings. */
-export type AdminSettingsPatch = Partial<Omit<AdminSettings, 'site_version'>> & {
+export type AdminSettingsPatch = Partial<Omit<AdminSettings, 'site_version' | 'site_mode_locked'>> & {
   email_mailgun_api_key?: string
   email_smtp_password?: string
   github_oauth_client_secret?: string

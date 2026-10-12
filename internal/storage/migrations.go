@@ -433,6 +433,10 @@ func RunMigrations() error {
 		fmt.Printf("migration: MigrateGrantSiteCreatePermissions failed: %v\n", err)
 		errCount++
 	}
+	if err := MigrateSiteSettingsAddSiteMode(); err != nil {
+		fmt.Printf("migration: MigrateSiteSettingsAddSiteMode failed: %v\n", err)
+		errCount++
+	}
 
 	if errCount == 0 {
 		return nil

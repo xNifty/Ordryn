@@ -6288,6 +6288,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AdminSettings"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
 
   /api/v2/admin/users:
     get:
@@ -7362,6 +7366,10 @@ components:
         attachment_max_bytes:
           type: integer
           description: Largest file a member may attach, in bytes.
+        site_mode:
+          type: string
+          enum: [multi, company]
+          description: multi lets anyone allowed create organizations; company runs the site as one company with admin-created teams.
 
     NotificationPreferences:
       type: object
@@ -10358,6 +10366,12 @@ components:
         members_can_create_organizations:
           type: boolean
           description: Whether the member site role has orgs:create. Admins can always create organizations.
+        site_mode:
+          type: string
+          enum: [multi, company]
+        site_mode_locked:
+          type: boolean
+          description: True once projects or organizations exist; site_mode can no longer change.
         allow_user_invites:
           type: boolean
         user_invite_limit:
@@ -10483,6 +10497,12 @@ components:
         members_can_create_organizations:
           type: boolean
           description: Whether the member site role has orgs:create. Admins can always create organizations.
+        site_mode:
+          type: string
+          enum: [multi, company]
+          description: |
+            Can change only while no projects or organizations exist; otherwise the request
+            fails with 409 and nothing is saved.
         allow_user_invites:
           type: boolean
         user_invite_limit:

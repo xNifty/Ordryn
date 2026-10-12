@@ -79,7 +79,11 @@ func CloseSharedPool() {
 	}
 }
 
-// ResetSharedPoolForTests closes and resets the singleton between tests.
+// ResetSharedPoolForTests closes and resets the singleton between tests. The next
+// connection may be to a different database, so caches of database rows go too.
 func ResetSharedPoolForTests() {
 	CloseSharedPool()
+	InvalidateSiteRoleCache()
+	resetSystemUserCache()
+	resetTaskTextLimitsCache()
 }
