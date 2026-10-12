@@ -83,6 +83,10 @@ export function useAuth() {
     return !!user.value?.permissions?.includes(permission)
   }
 
+  // Site admins can always create; everyone else needs the permission on their site role.
+  const canCreateProjects = computed(() => hasPermission('admin') || hasPermission('projects:create'))
+  const canCreateOrganizations = computed(() => hasPermission('admin') || hasPermission('orgs:create'))
+
   return {
     user,
     loading,
@@ -90,6 +94,8 @@ export function useAuth() {
     isAuthenticated,
     needsUsernameClaim,
     hasPermission,
+    canCreateProjects,
+    canCreateOrganizations,
     refresh,
     login,
     verifyMFA,

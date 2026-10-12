@@ -30,6 +30,8 @@ const settings = reactive<AdminSettings>({
   invite_only: false,
   enable_join_requests: false,
   allow_user_invites: false,
+  members_can_create_projects: true,
+  members_can_create_organizations: true,
   user_invite_limit: 5,
   invite_expiration_days: 7,
   max_description_length: 20000,
@@ -102,6 +104,8 @@ async function saveSettings() {
       invite_only: settings.invite_only,
       enable_join_requests: settings.enable_join_requests,
       allow_user_invites: settings.allow_user_invites,
+      members_can_create_projects: settings.members_can_create_projects,
+      members_can_create_organizations: settings.members_can_create_organizations,
       user_invite_limit: settings.user_invite_limit,
       invite_expiration_days: settings.invite_expiration_days,
       max_description_length: settings.max_description_length,
@@ -305,6 +309,15 @@ onMounted(load)
               min="0"
             />
             <div class="form-text">Days before a sent invite expires. Set to 0 for invites that never expire.</div>
+          </div>
+          <div class="form-check mb-2">
+            <input id="admin-members-create-projects" v-model="settings.members_can_create_projects" class="form-check-input" type="checkbox" />
+            <label class="form-check-label" for="admin-members-create-projects">Allow regular users to create projects</label>
+          </div>
+          <div class="form-check mb-3">
+            <input id="admin-members-create-orgs" v-model="settings.members_can_create_organizations" class="form-check-input" type="checkbox" />
+            <label class="form-check-label" for="admin-members-create-orgs">Allow regular users to create organizations</label>
+            <div class="form-text">Admins can always create both. Turning these off doesn't affect existing projects or organizations.</div>
           </div>
           <div class="row g-3 mb-3">
             <div class="col-sm-6">

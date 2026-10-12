@@ -4,6 +4,7 @@ import { useRoute, RouterLink } from 'vue-router'
 import Sortable from 'sortablejs'
 import type { Project, SavedView } from '@/api/types'
 import { projectNavLabel, projectOptionLabel, isArchivedProject, isProjectOwner } from '@/utils/projectLabel'
+import { useAuth } from '@/composables/useAuth'
 
 const props = defineProps<{
   collapsed: boolean
@@ -26,6 +27,7 @@ const emit = defineEmits<{
 }>()
 
 const route = useRoute()
+const { canCreateProjects } = useAuth()
 
 const overdueCount = inject<Ref<number>>('overdueCount', ref(0))
 const pendingInviteCount = inject<Ref<number>>('pendingInviteCount', ref(0))
@@ -319,7 +321,7 @@ onBeforeUnmount(() => {
         </div>
       </li>
 
-      <li class="sidebar-nav-item d-flex align-items-center">
+      <li v-if="canCreateProjects" class="sidebar-nav-item d-flex align-items-center">
         <button
           type="button"
           class="sidebar-nav-link text-start w-100 border-0 bg-transparent"

@@ -95,6 +95,9 @@ func CreateOrganizationForUser(ctx context.Context, userID int, name, descriptio
 	if err != nil {
 		return nil, err
 	}
+	if !storage.UserHasSitePermission(userID, storage.SitePermOrgsCreate) {
+		return nil, fmt.Errorf("%w: you don't have permission to create organizations", ErrForbidden)
+	}
 	n, err := storage.CountOrganizationsCreatedBy(userID)
 	if err != nil {
 		return nil, err

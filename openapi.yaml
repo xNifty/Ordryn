@@ -2081,6 +2081,7 @@ paths:
     post:
       tags: [Organizations]
       summary: Create an organization
+      description: Requires the orgs:create site permission (admins always have it).
       security:
         - SessionCookie: []
         - BearerAuth: []
@@ -2099,6 +2100,8 @@ paths:
                 $ref: "#/components/schemas/Organization"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /api/v2/organizations/{id}:
     parameters:
@@ -2542,6 +2545,7 @@ paths:
     post:
       tags: [Projects]
       summary: Create a project
+      description: Requires the projects:create site permission (admins always have it).
       security:
         - SessionCookie: []
         - BearerAuth: []
@@ -2560,6 +2564,8 @@ paths:
                 $ref: "#/components/schemas/Project"
         "400":
           $ref: "#/components/responses/BadRequest"
+        "403":
+          $ref: "#/components/responses/Forbidden"
 
   /api/v2/projects/reorder:
     post:
@@ -10200,6 +10206,12 @@ components:
           minimum: 16384
           maximum: 52428800
           description: Per-file upload limit in bytes (default 5 MB, at most 50 MB). Files are stored in the database.
+        members_can_create_projects:
+          type: boolean
+          description: Whether the member site role has projects:create. Admins can always create projects.
+        members_can_create_organizations:
+          type: boolean
+          description: Whether the member site role has orgs:create. Admins can always create organizations.
         allow_user_invites:
           type: boolean
         user_invite_limit:
@@ -10319,6 +10331,12 @@ components:
           minimum: 16384
           maximum: 52428800
           description: Per-file upload limit in bytes (default 5 MB, at most 50 MB). Files are stored in the database.
+        members_can_create_projects:
+          type: boolean
+          description: Whether the member site role has projects:create. Admins can always create projects.
+        members_can_create_organizations:
+          type: boolean
+          description: Whether the member site role has orgs:create. Admins can always create organizations.
         allow_user_invites:
           type: boolean
         user_invite_limit:

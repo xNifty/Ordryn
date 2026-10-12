@@ -9,10 +9,12 @@ import RolePermissionFields from '@/components/RolePermissionFields.vue'
 import UserSearchCombobox from '@/components/UserSearchCombobox.vue'
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
+import { useAuth } from '@/composables/useAuth'
 import { slugifyRoleName } from '@/utils/projectPerms'
 
 const toast = useToast()
 const { askConfirm } = useConfirm()
+const { canCreateOrganizations } = useAuth()
 
 const orgs = ref<Organization[]>([])
 const selectedId = ref<number | null>(null)
@@ -579,7 +581,7 @@ onBeforeUnmount(destroySortable)
             <li v-if="!orgs.length" class="list-group-item text-muted">No organizations yet.</li>
           </ul>
         </div>
-        <form class="card card-body" @submit.prevent="createOrg">
+        <form v-if="canCreateOrganizations" class="card card-body" @submit.prevent="createOrg">
           <h2 class="h6">Create organization</h2>
           <input v-model="newName" class="form-control mb-2" maxlength="80" required placeholder="Name" />
           <textarea v-model="newDescription" class="form-control mb-2" rows="2" maxlength="1000" placeholder="Description (optional)" />
@@ -837,7 +839,7 @@ onBeforeUnmount(destroySortable)
             </form>
           </div>
         </div>
-        <p v-else class="text-muted">Select or create an organization.</p>
+        <p v-else class="text-muted">{{ canCreateOrganizations ? 'Select or create an organization.' : 'Select an organization.' }}</p>
       </div>
     </div>
 

@@ -99,6 +99,9 @@ func CreateProjectForUser(ctx context.Context, userID int, in CreateProjectInput
 	if len(description) > MaxProjectDescriptionLength {
 		return nil, fmt.Errorf("%w: project description must be %d characters or less", ErrValidation, MaxProjectDescriptionLength)
 	}
+	if !storage.UserHasSitePermission(userID, storage.SitePermProjectsCreate) {
+		return nil, fmt.Errorf("%w: you don't have permission to create projects", ErrForbidden)
+	}
 	var spec *storage.OrgImportSpec
 	if in.OrganizationID != nil && *in.OrganizationID > 0 {
 		org, err := requireOrgManage(*in.OrganizationID, userID)

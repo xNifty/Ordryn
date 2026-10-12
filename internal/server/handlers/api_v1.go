@@ -1216,7 +1216,7 @@ func apiV1CreateProject(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if errors.Is(err, domain.ErrForbidden) {
-			utils.APIJSONError(w, http.StatusForbidden, "forbidden", "You cannot create a project in that organization.")
+			utils.APIJSONError(w, http.StatusForbidden, "forbidden", sharingClientMessage(err, "You cannot create a project in that organization."))
 			return
 		}
 		if errors.Is(err, domain.ErrNotFound) {

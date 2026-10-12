@@ -697,6 +697,8 @@ export type AdminSettings = {
   trash_retention_days: number
   attachments_enabled: boolean
   attachment_max_bytes: number
+  members_can_create_projects: boolean
+  members_can_create_organizations: boolean
   allow_user_invites: boolean
   user_invite_limit: number
   invite_expiration_days: number
