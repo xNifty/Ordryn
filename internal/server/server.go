@@ -81,6 +81,10 @@ func StartServer() error {
 	if err := RunBootstrap(); err != nil {
 		return fmt.Errorf("bootstrap failed: %w", err)
 	}
+	// Creates the company once the first account exists and enrolls anyone missed.
+	if err := storage.EnsureCompanyReady(); err != nil {
+		fmt.Printf("Warning: company setup failed: %v\n", err)
+	}
 
 	mailer.SetAuditor(storage.RecordEmailAudit)
 	storage.StartEmailAuditPurgeWorker()

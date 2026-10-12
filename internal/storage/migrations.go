@@ -437,6 +437,10 @@ func RunMigrations() error {
 		fmt.Printf("migration: MigrateSiteSettingsAddSiteMode failed: %v\n", err)
 		errCount++
 	}
+	if err := MigrateOrganizationsAddCompany(); err != nil {
+		fmt.Printf("migration: MigrateOrganizationsAddCompany failed: %v\n", err)
+		errCount++
+	}
 
 	if errCount == 0 {
 		return nil

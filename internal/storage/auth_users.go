@@ -198,6 +198,10 @@ func RegisterUser(email, hashedPassword, timezone, userName string, roleID, invi
 	if err := tx.Commit(ctx); err != nil {
 		return 0, err
 	}
+	if err := JoinCompanyIfEnabled(id); err != nil {
+		// The account exists; EnsureCompanyReady enrolls it on the next startup.
+		fmt.Printf("company: could not add user %d: %v\n", id, err)
+	}
 	return id, nil
 }
 

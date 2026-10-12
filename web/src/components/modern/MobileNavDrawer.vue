@@ -19,7 +19,7 @@ const emit = defineEmits<{
 const route = useRoute()
 const router = useRouter()
 const { isAuthenticated, user, hasPermission, logout } = useAuth()
-const { siteInfo } = useSite()
+const { siteInfo, isCompanyMode } = useSite()
 const { push } = useToast()
 const overdueCount = inject<Ref<number>>('overdueCount', ref(0))
 const pendingInviteCount = inject<Ref<number>>('pendingInviteCount', ref(0))
@@ -199,7 +199,7 @@ watch(isAuthenticated, (ok) => {
                 @click="close"
               >
                 <i class="bi bi-diagram-3" />
-                <span>Organizations</span>
+                <span>{{ isCompanyMode ? 'Company & teams' : 'Organizations' }}</span>
               </RouterLink>
             </li>
             <li class="sidebar-nav-item">

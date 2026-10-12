@@ -73,6 +73,9 @@ func CreateUser(email, hashedPassword, timezone string, roleID int) (int, error)
 	if err != nil {
 		return 0, fmt.Errorf("create user: %w", err)
 	}
+	if err := JoinCompanyIfEnabled(id); err != nil {
+		fmt.Printf("company: could not add user %d: %v\n", id, err)
+	}
 	return id, nil
 }
 

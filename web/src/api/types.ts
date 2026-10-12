@@ -1392,6 +1392,8 @@ export type Organization = {
   role_name?: string
   permissions?: string[]
   can_manage?: boolean
+  /** The single organization everyone belongs to in company mode. */
+  is_company?: boolean
   member_count: number
   project_count: number
   created_at: string

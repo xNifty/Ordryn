@@ -400,7 +400,9 @@ onMounted(load)
           </div>
           <div class="form-check mb-3">
             <input id="admin-members-create-orgs" v-model="settings.members_can_create_organizations" class="form-check-input" type="checkbox" />
-            <label class="form-check-label" for="admin-members-create-orgs">Allow regular users to create organizations</label>
+            <label class="form-check-label" for="admin-members-create-orgs">
+              Allow regular users to create {{ settings.site_mode === 'company' ? 'teams' : 'organizations' }}
+            </label>
             <div class="form-text">
               These apply to the User role. Admins can always create both, and you can give other roles
               these abilities on <RouterLink to="/admin/site-roles">Site roles</RouterLink>. Turning these off

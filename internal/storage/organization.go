@@ -31,6 +31,8 @@ type Organization struct {
 	Role         string
 	MemberCount  int
 	ProjectCount int
+	// IsCompany marks the single organization everyone belongs to in company mode.
+	IsCompany bool
 }
 
 // OrganizationMember is a user assigned a role on an organization.
@@ -155,13 +157,14 @@ func MigrateProjectsAddOrgImport() error {
 }
 
 func scanOrganization(row interface{ Scan(dest ...any) error }, o *Organization) error {
-	return row.Scan(&o.ID, &o.Name, &o.Description, &o.CreatedBy, &o.CreatedAt, &o.UpdatedAt, &o.Role, &o.MemberCount, &o.ProjectCount)
+	return row.Scan(&o.ID, &o.Name, &o.Description, &o.CreatedBy, &o.CreatedAt, &o.UpdatedAt, &o.Role, &o.MemberCount, &o.ProjectCount, &o.IsCompany)
 }
 
 const organizationSelect = `SELECT o.id, o.name, COALESCE(o.description, ''), o.created_by, o.created_at, o.updated_at,
 		COALESCE(om.role, ''),
 		(SELECT COUNT(*) FROM organization_members m WHERE m.organization_id = o.id),
-		(SELECT COUNT(*) FROM projects p WHERE p.organization_id = o.id)
+		(SELECT COUNT(*) FROM projects p WHERE p.organization_id = o.id),
+		o.is_company
 	 FROM organizations o`
 
 // CreateOrganization inserts an organization and makes createdBy the owner.
@@ -312,7 +315,8 @@ func UpdateOrganization(orgID int, name, description *string) (*Organization, er
 	return GetOrganizationByID(orgID)
 }
 
-// DeleteOrganization removes an org after detaching projects.
+// DeleteOrganization removes an org after detaching projects (or, in company mode,
+// moving them to the company).
 func DeleteOrganization(orgID int) error {
 	pool, err := OpenDatabase()
 	if err != nil {
@@ -326,9 +330,16 @@ func DeleteOrganization(orgID int) error {
 	}
 	defer tx.Rollback(context.Background())
 
-	if _, err := tx.Exec(context.Background(),
-		`UPDATE projects SET organization_id = NULL, org_managed = FALSE, org_import = NULL, updated_at = CURRENT_TIMESTAMP
-		 WHERE organization_id = $1`, orgID); err != nil {
+	// Projects keep their members. In company mode they move to the company rather than
+	// becoming independent, since every project must belong to it.
+	if _, err := tx.Exec(context.Background(), `
+		UPDATE projects SET
+		  organization_id = (SELECT id FROM organizations WHERE is_company AND id <> $1),
+		  org_managed = FALSE,
+		  org_import = CASE WHEN EXISTS (SELECT 1 FROM organizations WHERE is_company AND id <> $1)
+		                    THEN $2 ELSE NULL END,
+		  updated_at = CURRENT_TIMESTAMP
+		 WHERE organization_id = $1`, orgID, OrgImportSelect); err != nil {
 		return err
 	}
 	tag, err := tx.Exec(context.Background(), `DELETE FROM organizations WHERE id = $1`, orgID)

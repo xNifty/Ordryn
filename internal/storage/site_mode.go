@@ -48,8 +48,9 @@ func MigrateSiteSettingsAddSiteMode() error {
 	return nil
 }
 
-// siteModeLockedSQL is true once the mode can't safely change.
-const siteModeLockedSQL = `(EXISTS (SELECT 1 FROM projects) OR EXISTS (SELECT 1 FROM organizations))`
+// siteModeLockedSQL is true once the mode can't safely change. The company
+// organization doesn't count: company mode creates it as soon as it is chosen.
+const siteModeLockedSQL = `(EXISTS (SELECT 1 FROM projects) OR EXISTS (SELECT 1 FROM organizations WHERE NOT is_company))`
 
 // GetSiteMode returns the site mode, defaulting to multi when unset.
 func GetSiteMode() (string, error) {

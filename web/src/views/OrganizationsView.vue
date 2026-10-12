@@ -10,11 +10,17 @@ import UserSearchCombobox from '@/components/UserSearchCombobox.vue'
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
 import { useAuth } from '@/composables/useAuth'
+import { useSite } from '@/composables/useSite'
 import { slugifyRoleName } from '@/utils/projectPerms'
 
 const toast = useToast()
 const { askConfirm } = useConfirm()
 const { canCreateOrganizations } = useAuth()
+const { isCompanyMode } = useSite()
+// Company mode calls organizations "teams"; the company itself is listed first.
+const orgNoun = computed(() => (isCompanyMode.value ? 'team' : 'organization'))
+const sortedOrgs = computed(() => [...orgs.value].sort((a, b) => Number(!!b.is_company) - Number(!!a.is_company)))
+const isCompany = computed(() => !!org.value?.is_company)
 
 const orgs = ref<Organization[]>([])
 const selectedId = ref<number | null>(null)
@@ -211,8 +217,10 @@ async function saveOrg() {
 async function deleteOrg() {
   if (!org.value) return
   const ok = await askConfirm({
-    title: 'Delete organization?',
-    message: `Delete “${org.value.name}”? Linked projects become independent and keep their own members.`,
+    title: `Delete ${orgNoun.value}?`,
+    message: isCompanyMode.value
+      ? `Delete “${org.value.name}”? Its projects move to the company and keep their own members.`
+      : `Delete “${org.value.name}”? Linked projects become independent and keep their own members.`,
     confirmLabel: 'Delete',
     danger: true,
   })
@@ -524,8 +532,12 @@ onBeforeUnmount(destroySortable)
 
 <template>
   <div class="container mt-4">
-    <h1>Organizations</h1>
-    <p class="text-muted">
+    <h1>{{ isCompanyMode ? 'Company & teams' : 'Organizations' }}</h1>
+    <p v-if="isCompanyMode" class="text-muted">
+      Everyone on this site belongs to the company. Teams are smaller groups inside it whose members and roles
+      you can import when creating a project. Company projects are visible only to the people added to them.
+    </p>
+    <p v-else class="text-muted">
       Groups of people and roles you can reuse when creating or attaching a project.
       Import can copy everyone and stay editable, copy everyone and lock roles, or import only
       selected members. People who accept an organization invite are added to copy and lock
@@ -563,26 +575,29 @@ onBeforeUnmount(destroySortable)
     <div class="row">
       <div class="col-md-4">
         <div class="card mb-3">
-          <div class="card-header"><h2 class="h6 mb-0">Your organizations</h2></div>
+          <div class="card-header"><h2 class="h6 mb-0">{{ isCompanyMode ? 'Company & your teams' : 'Your organizations' }}</h2></div>
           <ul class="list-group list-group-flush">
             <li
-              v-for="item in orgs"
+              v-for="item in sortedOrgs"
               :key="item.id"
               class="list-group-item list-group-item-action"
               :class="{ active: item.id === selectedId }"
               role="button"
               @click="selectedId = item.id"
             >
-              <div class="fw-semibold">{{ item.name }}</div>
+              <div class="fw-semibold">
+                {{ item.name }}
+                <span v-if="item.is_company" class="badge text-bg-info ms-1">Company</span>
+              </div>
               <div class="small" :class="item.id === selectedId ? 'text-white-50' : 'text-muted'">
                 {{ item.member_count }} members · {{ item.project_count }} projects · {{ item.role_name || item.role }}
               </div>
             </li>
-            <li v-if="!orgs.length" class="list-group-item text-muted">No organizations yet.</li>
+            <li v-if="!orgs.length" class="list-group-item text-muted">No {{ orgNoun }}s yet.</li>
           </ul>
         </div>
         <form v-if="canCreateOrganizations" class="card card-body" @submit.prevent="createOrg">
-          <h2 class="h6">Create organization</h2>
+          <h2 class="h6">Create {{ orgNoun }}</h2>
           <input v-model="newName" class="form-control mb-2" maxlength="80" required placeholder="Name" />
           <textarea v-model="newDescription" class="form-control mb-2" rows="2" maxlength="1000" placeholder="Description (optional)" />
           <button class="btn btn-primary" type="submit" :disabled="saving || !newName.trim()">Create</button>
@@ -603,8 +618,8 @@ onBeforeUnmount(destroySortable)
               </div>
               <div class="d-flex gap-2">
                 <button class="btn btn-sm btn-primary" type="submit" :disabled="saving">Save</button>
-                <button v-if="org.role === 'owner'" class="btn btn-sm btn-outline-danger" type="button" @click="deleteOrg">
-                  Delete organization
+                <button v-if="org.role === 'owner' && !isCompany" class="btn btn-sm btn-outline-danger" type="button" @click="deleteOrg">
+                  Delete {{ orgNoun }}
                 </button>
               </div>
             </form>
@@ -618,7 +633,11 @@ onBeforeUnmount(destroySortable)
         <div v-if="org" class="card mb-3">
           <div class="card-body">
             <h2 class="h6">Members</h2>
-            <p class="small text-muted">These people are copied onto a project when you import this organization. Invites must be accepted before they join. After they accept they are added to copy and lock projects automatically.</p>
+            <p v-if="isCompany" class="small text-muted">
+              Everyone on the site, added automatically when their account is created. Change someone's company role
+              here; to remove someone, ban their account.
+            </p>
+            <p v-else class="small text-muted">These people are copied onto a project when you import this {{ orgNoun }}. Invites must be accepted before they join. After they accept they are added to copy and lock projects automatically.</p>
             <ul class="list-unstyled mb-3">
               <li v-for="m in members" :key="m.user_id" class="d-flex flex-wrap align-items-center gap-2 mb-2">
                 <span>{{ m.user_name || m.email }}</span>
@@ -631,14 +650,14 @@ onBeforeUnmount(destroySortable)
                   >
                     <option v-for="r in assignableRoles" :key="r.slug" :value="r.slug">{{ r.name }}</option>
                   </select>
-                  <button class="btn btn-sm btn-outline-danger" type="button" @click="removeMember(m.user_id)">Remove</button>
+                  <button v-if="!isCompany" class="btn btn-sm btn-outline-danger" type="button" @click="removeMember(m.user_id)">Remove</button>
                 </template>
               </li>
             </ul>
             <p v-if="canManage && !assignableRoles.length" class="small text-muted mb-2">
               This organization has no roles yet. Create one under Roles below, then invite people with it.
             </p>
-            <form v-if="canManage" class="row g-2 align-items-end mb-3" @submit.prevent="inviteMember">
+            <form v-if="canManage && !isCompany" class="row g-2 align-items-end mb-3" @submit.prevent="inviteMember">
               <div class="col-sm-6">
                 <label class="form-label small mb-0">Username</label>
                 <UserSearchCombobox v-model="inviteUsername" :exclude-usernames="excludeUsernames" />

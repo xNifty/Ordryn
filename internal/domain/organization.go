@@ -46,11 +46,26 @@ func requireOrgManage(orgID, userID int) (*storage.Organization, error) {
 	if err != nil {
 		return nil, err
 	}
-	if !storage.RoleCanManageOrganization(orgID, org.Role) {
+	if !CanManageOrganization(org, userID) {
 		return nil, ErrForbidden
 	}
 	return org, nil
 }
+
+// CanManageOrganization reports whether the user may manage org. Nobody owns the
+// company organization; site admins manage it instead.
+func CanManageOrganization(org *storage.Organization, userID int) bool {
+	if storage.RoleCanManageOrganization(org.ID, org.Role) {
+		return true
+	}
+	return org.IsCompany && storage.UserHasSitePermission(userID, storage.SitePermAdmin)
+}
+
+var (
+	errCompanyNoDelete = fmt.Errorf("%w: the company can't be deleted", ErrValidation)
+	errCompanyNoLeave  = fmt.Errorf("%w: everyone belongs to the company; ban the account to remove someone", ErrValidation)
+	errCompanyNoInvite = fmt.Errorf("%w: everyone already belongs to the company", ErrValidation)
+)
 
 func denyOrgManagedMembershipEdits(projectID int) error {
 	if storage.ProjectIsOrgManaged(projectID) {
@@ -141,6 +156,9 @@ func DeleteOrganizationForUser(ctx context.Context, userID, orgID int) error {
 	if err != nil {
 		return err
 	}
+	if org.IsCompany {
+		return errCompanyNoDelete
+	}
 	if org.Role != storage.RoleOwner {
 		return ErrForbidden
 	}
@@ -170,6 +188,9 @@ func InviteToOrganization(ctx context.Context, actorUserID, orgID int, rawUserna
 	org, err := requireOrgManage(orgID, actorUserID)
 	if err != nil {
 		return nil, err
+	}
+	if org.IsCompany {
+		return nil, errCompanyNoInvite
 	}
 	name, err := PrepareUsername(rawUsername)
 	if err != nil {
@@ -373,9 +394,13 @@ func OrganizationMemberRoleImpactForUser(ctx context.Context, actorUserID, orgID
 // ListOrganizationProjectRostersForUser returns attached projects and their members.
 func ListOrganizationProjectRostersForUser(ctx context.Context, actorUserID, orgID int) ([]storage.OrgProjectRoster, error) {
 	_ = ctx
-	if _, err := requireOrgAccess(orgID, actorUserID); err != nil {
+	org, err := requireOrgAccess(orgID, actorUserID)
+	if err != nil {
 		return nil, err
 	}
+	// Company projects stay members-only: everyone is in the company, so listing all
+	// of them would show every employee every project.
+	hideInaccessible := org.IsCompany && !CanManageOrganization(org, actorUserID)
 	rosters, err := storage.ListOrganizationProjectRosters(orgID)
 	if err != nil {
 		return nil, err
@@ -383,14 +408,19 @@ func ListOrganizationProjectRostersForUser(ctx context.Context, actorUserID, org
 	if rosters == nil {
 		rosters = []storage.OrgProjectRoster{}
 	}
-	for i := range rosters {
-		proj, err := storage.GetAccessibleProjectByID(rosters[i].ID, actorUserID)
+	visible := rosters[:0]
+	for _, r := range rosters {
+		proj, err := storage.GetAccessibleProjectByID(r.ID, actorUserID)
 		if err != nil {
+			if !hideInaccessible {
+				visible = append(visible, r)
+			}
 			continue
 		}
-		rosters[i].CanManage = storage.RoleCanManageProject(proj.ID, proj.Role)
+		r.CanManage = storage.RoleCanManageProject(proj.ID, proj.Role)
+		visible = append(visible, r)
 	}
-	return rosters, nil
+	return visible, nil
 }
 
 // SyncOrganizationProjectsForUser copies current org members onto copy/lock projects.
@@ -416,8 +446,11 @@ func RemoveOrganizationMemberForUser(ctx context.Context, actorUserID, orgID, me
 	if err != nil {
 		return err
 	}
+	if org.IsCompany {
+		return errCompanyNoLeave
+	}
 	selfLeave := actorUserID == memberUserID
-	if !selfLeave && !storage.RoleCanManageOrganization(orgID, org.Role) {
+	if !selfLeave && !CanManageOrganization(org, actorUserID) {
 		return ErrForbidden
 	}
 	targetRole, err := storage.GetOrganizationRole(orgID, memberUserID)

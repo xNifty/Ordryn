@@ -123,7 +123,7 @@ func bootstrapSiteMode(raw string) error {
 	if current == mode {
 		return nil
 	}
-	if err := storage.SetSiteMode(mode); err != nil {
+	if err := storage.ChangeSiteMode(mode); err != nil {
 		if errors.Is(err, storage.ErrSiteModeLocked) {
 			fmt.Printf("Bootstrap: site mode is %q and locked because projects or organizations exist; ignoring ORDRYN_BOOTSTRAP_SITE_MODE=%s\n", current, mode)
 			return nil

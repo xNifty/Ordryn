@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/csv"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -136,6 +137,10 @@ func apiV1ImportConfirm(w http.ResponseWriter, r *http.Request) {
 	cols := stagingColsToMap(staging.Cols)
 	imported, skipped, importErr := importTasksFromCSV(userID, cols, staging.Rows)
 	_ = clearImportStaging(r, w)
+	if errors.Is(importErr, errImportProjectCreateForbidden) {
+		utils.APIJSONError(w, http.StatusForbidden, "forbidden", importErr.Error())
+		return
+	}
 	if importErr != nil {
 		utils.APIJSONError(w, http.StatusInternalServerError, "internal_error", importErr.Error())
 		return
@@ -433,6 +438,9 @@ func parseBoolCell(val string) bool {
 	}
 }
 
+// errImportProjectCreateForbidden stops an import that would create a project the user may not create.
+var errImportProjectCreateForbidden = errors.New("you don't have permission to create projects; the import names a project you don't have")
+
 func importTasksFromCSV(userID int, cols importColumnMap, rows [][]string) (imported, skipped int, err error) {
 	pool, err := storage.OpenDatabase()
 	if err != nil {
@@ -505,7 +513,15 @@ func importTasksFromCSV(userID int, cols importColumnMap, rows [][]string) (impo
 				var foundID int
 				err := tx.QueryRow(ctx, `SELECT id FROM projects WHERE user_id = $1 AND LOWER(name) = LOWER($2) AND COALESCE(archived, false) = false ORDER BY id ASC LIMIT 1`, userID, projectName).Scan(&foundID)
 				if err != nil {
-					err = tx.QueryRow(ctx, "INSERT INTO projects (user_id, name) VALUES ($1, $2) RETURNING id", userID, projectName).Scan(&foundID)
+					if !storage.UserHasSitePermission(userID, storage.SitePermProjectsCreate) {
+						return imported, skipped, fmt.Errorf("%w: %q", errImportProjectCreateForbidden, projectName)
+					}
+					// In company mode new projects belong to the company, members-only like any other.
+					err = tx.QueryRow(ctx, `
+						INSERT INTO projects (user_id, name, organization_id, org_import)
+						SELECT $1, $2, c.id, CASE WHEN c.id IS NULL THEN NULL ELSE $3 END
+						FROM (SELECT (SELECT id FROM organizations WHERE is_company) AS id) c
+						RETURNING id`, userID, projectName, storage.OrgImportSelect).Scan(&foundID)
 					if err != nil {
 						return imported, skipped, err
 					}

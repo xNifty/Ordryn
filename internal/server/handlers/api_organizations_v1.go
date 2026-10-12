@@ -20,6 +20,7 @@ type apiOrganizationJSON struct {
 	RoleName     string   `json:"role_name,omitempty"`
 	Permissions  []string `json:"permissions,omitempty"`
 	CanManage    bool     `json:"can_manage"`
+	IsCompany    bool     `json:"is_company"`
 	MemberCount  int      `json:"member_count"`
 	ProjectCount int      `json:"project_count"`
 	CreatedAt    string   `json:"created_at"`
@@ -58,7 +59,7 @@ type apiOrganizationInviteJSON struct {
 	InviterUserName  string `json:"inviter_user_name,omitempty"`
 }
 
-func organizationToJSON(o storage.Organization) apiOrganizationJSON {
+func organizationToJSON(o storage.Organization, viewerID int) apiOrganizationJSON {
 	perms := storage.RolePermissionList(0, o.Role)
 	if def := storage.ResolveOrgRoleDef(o.ID, o.Role); def != nil && o.Role != storage.RoleOwner {
 		perms = def.Permissions
@@ -74,7 +75,8 @@ func organizationToJSON(o storage.Organization) apiOrganizationJSON {
 		Role:         o.Role,
 		RoleName:     storage.OrgRoleDisplayName(o.ID, o.Role),
 		Permissions:  perms,
-		CanManage:    storage.RoleCanManageOrganization(o.ID, o.Role),
+		CanManage:    domain.CanManageOrganization(&o, viewerID),
+		IsCompany:    o.IsCompany,
 		MemberCount:  o.MemberCount,
 		ProjectCount: o.ProjectCount,
 		CreatedAt:    formatRFC3339(o.CreatedAt),
@@ -115,7 +117,7 @@ func APIV1OrganizationsRouter(w http.ResponseWriter, r *http.Request) {
 			}
 			out := make([]apiOrganizationJSON, 0, len(orgs))
 			for _, o := range orgs {
-				out = append(out, organizationToJSON(o))
+				out = append(out, organizationToJSON(o, userID))
 			}
 			w.Header().Set("Content-Type", "application/json; charset=utf-8")
 			_ = json.NewEncoder(w).Encode(out)
@@ -132,7 +134,7 @@ func APIV1OrganizationsRouter(w http.ResponseWriter, r *http.Request) {
 			}
 			w.Header().Set("Content-Type", "application/json; charset=utf-8")
 			w.WriteHeader(http.StatusCreated)
-			_ = json.NewEncoder(w).Encode(organizationToJSON(*created))
+			_ = json.NewEncoder(w).Encode(organizationToJSON(*created, userID))
 		default:
 			utils.APIJSONError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Method not allowed.")
 		}
@@ -154,7 +156,7 @@ func APIV1OrganizationsRouter(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			w.Header().Set("Content-Type", "application/json; charset=utf-8")
-			_ = json.NewEncoder(w).Encode(organizationToJSON(*org))
+			_ = json.NewEncoder(w).Encode(organizationToJSON(*org, userID))
 		case http.MethodPatch:
 			var req apiOrganizationPatchRequest
 			if err := decodeJSONBody(r, &req); err != nil {
@@ -167,7 +169,7 @@ func APIV1OrganizationsRouter(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			w.Header().Set("Content-Type", "application/json; charset=utf-8")
-			_ = json.NewEncoder(w).Encode(organizationToJSON(*updated))
+			_ = json.NewEncoder(w).Encode(organizationToJSON(*updated, userID))
 		case http.MethodDelete:
 			if err := domain.DeleteOrganizationForUser(r.Context(), userID, orgID); err != nil {
 				writeProjectRoleDomainError(w, err)

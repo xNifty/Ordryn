@@ -113,7 +113,34 @@ func CreateProjectForUser(ctx context.Context, userID int, in CreateProjectInput
 			return nil, err
 		}
 		spec = parsed
+	} else {
+		company, err := companyProjectSpec()
+		if err != nil {
+			return nil, err
+		}
+		spec = company
 	}
+	return createProject(userID, name, description, spec)
+}
+
+// companyProjectSpec attaches projects created without a team to the company in
+// company mode. Nobody else is imported: projects stay visible to their members only.
+func companyProjectSpec() (*storage.OrgImportSpec, error) {
+	mode, err := storage.GetSiteMode()
+	if err != nil || mode != storage.SiteModeCompany {
+		return nil, err
+	}
+	orgID, err := storage.EnsureCompanyOrganization()
+	if err != nil {
+		return nil, err
+	}
+	if orgID == 0 {
+		return nil, fmt.Errorf("company organization is missing")
+	}
+	return &storage.OrgImportSpec{OrganizationID: orgID, Mode: storage.OrgImportSelect}, nil
+}
+
+func createProject(userID int, name, description string, spec *storage.OrgImportSpec) (*storage.Project, error) {
 	proj, err := storage.CreateProjectWithOrg(userID, name, description, spec)
 	if err != nil {
 		return nil, err

@@ -5,6 +5,7 @@ import Sortable from 'sortablejs'
 import type { Project, SavedView } from '@/api/types'
 import { projectNavLabel, projectOptionLabel, isArchivedProject, isProjectOwner } from '@/utils/projectLabel'
 import { useAuth } from '@/composables/useAuth'
+import { useSite } from '@/composables/useSite'
 
 const props = defineProps<{
   collapsed: boolean
@@ -28,6 +29,7 @@ const emit = defineEmits<{
 
 const route = useRoute()
 const { canCreateProjects } = useAuth()
+const { isCompanyMode } = useSite()
 
 const overdueCount = inject<Ref<number>>('overdueCount', ref(0))
 const pendingInviteCount = inject<Ref<number>>('pendingInviteCount', ref(0))
@@ -192,7 +194,7 @@ onBeforeUnmount(() => {
           @click="emit('close-mobile')"
         >
           <i class="bi bi-diagram-3" />
-          <span class="sidebar-text">Organizations</span>
+          <span class="sidebar-text">{{ isCompanyMode ? 'Company & teams' : 'Organizations' }}</span>
         </RouterLink>
       </li>
     </ul>

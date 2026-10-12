@@ -2081,7 +2081,10 @@ paths:
     post:
       tags: [Organizations]
       summary: Create an organization
-      description: Requires the orgs:create site permission (admins always have it).
+      description: |
+        Requires the orgs:create site permission (admins always have it). In company mode
+        these are teams inside the company, and entering company mode removes orgs:create
+        from the User site role.
       security:
         - SessionCookie: []
         - BearerAuth: []
@@ -2545,7 +2548,10 @@ paths:
     post:
       tags: [Projects]
       summary: Create a project
-      description: Requires the projects:create site permission (admins always have it).
+      description: |
+        Requires the projects:create site permission (admins always have it). In company
+        mode a project created without `organization_id` belongs to the company with only
+        its creator as a member.
       security:
         - SessionCookie: []
         - BearerAuth: []
@@ -8626,6 +8632,12 @@ components:
             type: string
         can_manage:
           type: boolean
+          description: True for members whose role can manage it, and for site admins on the company.
+        is_company:
+          type: boolean
+          description: |
+            The single organization everyone belongs to in company mode. It can't be deleted,
+            left, or invited to; accounts join it automatically.
         member_count:
           type: integer
         project_count:

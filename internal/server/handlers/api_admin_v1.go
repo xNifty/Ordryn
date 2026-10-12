@@ -406,7 +406,7 @@ func apiV1PatchAdminSettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// Applied first so a locked mode refuses the whole request instead of saving half of it.
-		if err := storage.SetSiteMode(mode); err != nil {
+		if err := storage.ChangeSiteMode(mode); err != nil {
 			if errors.Is(err, storage.ErrSiteModeLocked) {
 				utils.APIJSONError(w, http.StatusConflict, "conflict",
 					"The site mode can't change once projects or organizations exist.")
