@@ -75,8 +75,10 @@ func CloseSharedPool() {
 	if sharedPool != nil {
 		sharedPool.Close()
 		sharedPool = nil
-		poolOnce = sync.Once{}
 	}
+	// Also forget a failed open (e.g. env not set yet), so the next call retries.
+	poolErr = nil
+	poolOnce = sync.Once{}
 }
 
 // ResetSharedPoolForTests closes and resets the singleton between tests. The next
