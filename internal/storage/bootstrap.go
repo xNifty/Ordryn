@@ -48,7 +48,7 @@ func UserExistsByEmail(email string) (bool, error) {
 }
 
 // CreateUser inserts a user and returns the new id.
-// Generates a unique username from the email (bootstrap / admin create).
+// Generates a unique username from the email (admin create).
 func CreateUser(email, hashedPassword, timezone string, roleID int) (int, error) {
 	pool, err := OpenDatabase()
 	if err != nil {
@@ -77,45 +77,6 @@ func CreateUser(email, hashedPassword, timezone string, roleID int) (int, error)
 		fmt.Printf("company: could not add user %d: %v\n", id, err)
 	}
 	return id, nil
-}
-
-// GetUserIDByEmail returns the user id for an email.
-func GetUserIDByEmail(email string) (int, error) {
-	pool, err := OpenDatabase()
-	if err != nil {
-		return 0, err
-	}
-	defer CloseDatabase(pool)
-
-	var id int
-	err = pool.QueryRow(context.Background(),
-		`SELECT id FROM users WHERE email = $1`, strings.TrimSpace(email)).Scan(&id)
-	if err != nil {
-		return 0, err
-	}
-	return id, nil
-}
-
-// HasActiveAPIKeyNamed reports whether the user has a non-revoked key with the given name.
-func HasActiveAPIKeyNamed(userID int, name string) (bool, error) {
-	pool, err := OpenDatabase()
-	if err != nil {
-		return false, err
-	}
-	defer CloseDatabase(pool)
-
-	var id int
-	err = pool.QueryRow(context.Background(),
-		`SELECT id FROM api_keys
-		 WHERE user_id = $1 AND name = $2 AND project_id IS NULL AND revoked_at IS NULL
-		 LIMIT 1`, userID, name).Scan(&id)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return false, nil
-		}
-		return false, err
-	}
-	return true, nil
 }
 
 func defaultSiteSettings() SiteSettings {
@@ -150,17 +111,4 @@ func EnsureSiteSettingsRow() error {
 		return nil
 	}
 	return UpsertSiteSettings(defaultSiteSettings())
-}
-
-// EnsureEnableAPI upserts site_settings with enable_api=true, preserving other fields when present.
-func EnsureEnableAPI() error {
-	if err := EnsureSiteSettingsRow(); err != nil {
-		return err
-	}
-	s, err := GetSiteSettings()
-	if err != nil {
-		return err
-	}
-	s.EnableAPI = true
-	return UpsertSiteSettings(*s)
 }

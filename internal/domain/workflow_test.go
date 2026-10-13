@@ -50,6 +50,10 @@ func TestMain(m *testing.M) {
 		fmt.Fprintf(os.Stderr, "avatar_url: %v\n", err)
 		os.Exit(1)
 	}
+	if err := storage.MigrateUsersAddNames(); err != nil {
+		fmt.Fprintf(os.Stderr, "names: %v\n", err)
+		os.Exit(1)
+	}
 	if err := storage.MigrateUsersAddAllowProjectInvites(); err != nil {
 		fmt.Fprintf(os.Stderr, "allow_project_invites: %v\n", err)
 		os.Exit(1)
@@ -176,6 +180,10 @@ func TestMain(m *testing.M) {
 	}
 	if err := storage.CreateSiteSettingsTable(); err != nil {
 		fmt.Fprintf(os.Stderr, "site settings: %v\n", err)
+		os.Exit(1)
+	}
+	if err := storage.MigrateSiteSettingsAddCompanyHome(); err != nil {
+		fmt.Fprintf(os.Stderr, "company home: %v\n", err)
 		os.Exit(1)
 	}
 	if err := storage.MigrateSiteSettingsAddSiteMode(); err != nil {
@@ -346,6 +354,18 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 
+	if err := storage.MigrateSiteSettingsAddOwner(); err != nil {
+		fmt.Fprintf(os.Stderr, "site owner: %v\n", err)
+		os.Exit(1)
+	}
+	if err := storage.MigrateCompanyProjectAccess(); err != nil {
+		fmt.Fprintf(os.Stderr, "company project access: %v\n", err)
+		os.Exit(1)
+	}
+	if err := storage.MigrateRolesAddDisplayName(); err != nil {
+		fmt.Fprintf(os.Stderr, "roles display_name: %v\n", err)
+		os.Exit(1)
+	}
 	code := m.Run()
 	_ = db.Stop()
 	os.Exit(code)

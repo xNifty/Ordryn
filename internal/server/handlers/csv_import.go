@@ -141,6 +141,10 @@ func apiV1ImportConfirm(w http.ResponseWriter, r *http.Request) {
 		utils.APIJSONError(w, http.StatusForbidden, "forbidden", importErr.Error())
 		return
 	}
+	if errors.Is(importErr, errImportProjectRequired) {
+		utils.APIJSONError(w, http.StatusBadRequest, "invalid_request", importErr.Error())
+		return
+	}
 	if importErr != nil {
 		utils.APIJSONError(w, http.StatusInternalServerError, "internal_error", importErr.Error())
 		return
@@ -438,6 +442,9 @@ func parseBoolCell(val string) bool {
 	}
 }
 
+// errImportProjectRequired stops a company-mode import with a row that names no project.
+var errImportProjectRequired = errors.New("every task on this site needs a project; map a project column and fill it in for every row")
+
 // errImportProjectCreateForbidden stops an import that would create a project the user may not create.
 var errImportProjectCreateForbidden = errors.New("you don't have permission to create projects; the import names a project you don't have")
 
@@ -470,6 +477,7 @@ func importTasksFromCSV(userID int, cols importColumnMap, rows [][]string) (impo
 
 	projectCache := make(map[string]int)
 	maxDescription := domain.MaxDescriptionLength()
+	company := storage.IsCompanyMode()
 
 	for _, row := range rows {
 		title := cellValue(row, cols.title)
@@ -507,6 +515,9 @@ func importTasksFromCSV(userID int, cols importColumnMap, rows [][]string) (impo
 
 		var projectID *int
 		projectName := cellValue(row, cols.project)
+		if projectName == "" && company {
+			return imported, skipped, errImportProjectRequired
+		}
 		if projectName != "" {
 			pid, ok := projectCache[projectName]
 			if !ok {

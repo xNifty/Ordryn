@@ -28,7 +28,7 @@ const emit = defineEmits<{
 }>()
 
 const route = useRoute()
-const { canCreateProjects } = useAuth()
+const { canCreateProjects, managesPeople } = useAuth()
 const { isCompanyMode } = useSite()
 
 const overdueCount = inject<Ref<number>>('overdueCount', ref(0))
@@ -195,6 +195,19 @@ onBeforeUnmount(() => {
         >
           <i class="bi bi-diagram-3" />
           <span class="sidebar-text">{{ isCompanyMode ? 'Company & teams' : 'Organizations' }}</span>
+        </RouterLink>
+      </li>
+      <li v-if="managesPeople" class="sidebar-nav-item">
+        <RouterLink
+          to="/people"
+          class="sidebar-nav-link"
+          :class="{ active: route.path === '/people' }"
+          data-tooltip="People"
+          title="People"
+          @click="emit('close-mobile')"
+        >
+          <i class="bi bi-people" />
+          <span class="sidebar-text">People</span>
         </RouterLink>
       </li>
     </ul>

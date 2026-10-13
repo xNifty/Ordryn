@@ -12,13 +12,17 @@ import { useConfirm } from '@/composables/useConfirm'
 import { useAuth } from '@/composables/useAuth'
 import { useSite } from '@/composables/useSite'
 import { slugifyRoleName } from '@/utils/projectPerms'
+import { personLabel } from '@/utils/personLabel'
 
 const toast = useToast()
 const { askConfirm } = useConfirm()
-const { canCreateOrganizations } = useAuth()
+const { canCreateOrganizations, hasPermission } = useAuth()
 const { isCompanyMode } = useSite()
 // Company mode calls organizations "teams"; the company itself is listed first.
 const orgNoun = computed(() => (isCompanyMode.value ? 'team' : 'organization'))
+// Company teams are plain groups with no roles: admins and Manage teams create and fill them.
+const managesTeams = computed(() => hasPermission('admin') || hasPermission('teams:manage'))
+const canCreate = computed(() => (isCompanyMode.value ? managesTeams.value : canCreateOrganizations.value))
 const sortedOrgs = computed(() => [...orgs.value].sort((a, b) => Number(!!b.is_company) - Number(!!a.is_company)))
 const isCompany = computed(() => !!org.value?.is_company)
 
@@ -237,14 +241,15 @@ async function deleteOrg() {
 
 async function inviteMember() {
   if (!selectedId.value || !inviteUsername.value.trim()) return
-  if (!inviteRole.value) {
+  if (!inviteRole.value && !isCompanyMode.value) {
     toast.push('Choose a role for the invite', 'error')
     return
   }
   try {
     await api.createOrganizationInvite(selectedId.value, inviteUsername.value.trim(), inviteRole.value)
     inviteUsername.value = ''
-    toast.push('Invite sent', 'success')
+    // Company teams add people straight away; everyone is already in the company.
+    toast.push(isCompanyMode.value ? 'Added to the team' : 'Invite sent', 'success')
     await loadDetail()
     await loadOrgs()
   } catch (err) {
@@ -534,8 +539,8 @@ onBeforeUnmount(destroySortable)
   <div class="container mt-4">
     <h1>{{ isCompanyMode ? 'Company & teams' : 'Organizations' }}</h1>
     <p v-if="isCompanyMode" class="text-muted">
-      Everyone on this site belongs to the company. Teams are smaller groups inside it whose members and roles
-      you can import when creating a project. Company projects are visible only to the people added to them.
+      Everyone on this site is on the Company team. Other teams are groups of people you share projects with, such
+      as a pod that owns certain projects. What each person can do comes from their site role, not their team.
     </p>
     <p v-else class="text-muted">
       Groups of people and roles you can reuse when creating or attaching a project.
@@ -590,13 +595,13 @@ onBeforeUnmount(destroySortable)
                 <span v-if="item.is_company" class="badge text-bg-info ms-1">Company</span>
               </div>
               <div class="small" :class="item.id === selectedId ? 'text-white-50' : 'text-muted'">
-                {{ item.member_count }} members · {{ item.project_count }} projects · {{ item.role_name || item.role }}
+                {{ item.member_count }} members · {{ item.project_count }} projects · {{ item.role_name || item.role || 'Not a member' }}
               </div>
             </li>
             <li v-if="!orgs.length" class="list-group-item text-muted">No {{ orgNoun }}s yet.</li>
           </ul>
         </div>
-        <form v-if="canCreateOrganizations" class="card card-body" @submit.prevent="createOrg">
+        <form v-if="canCreate" class="card card-body" @submit.prevent="createOrg">
           <h2 class="h6">Create {{ orgNoun }}</h2>
           <input v-model="newName" class="form-control mb-2" maxlength="80" required placeholder="Name" />
           <textarea v-model="newDescription" class="form-control mb-2" rows="2" maxlength="1000" placeholder="Description (optional)" />
@@ -618,7 +623,7 @@ onBeforeUnmount(destroySortable)
               </div>
               <div class="d-flex gap-2">
                 <button class="btn btn-sm btn-primary" type="submit" :disabled="saving">Save</button>
-                <button v-if="org.role === 'owner' && !isCompany" class="btn btn-sm btn-outline-danger" type="button" @click="deleteOrg">
+                <button v-if="(org.role === 'owner' || (isCompanyMode && managesTeams)) && !isCompany" class="btn btn-sm btn-outline-danger" type="button" @click="deleteOrg">
                   Delete {{ orgNoun }}
                 </button>
               </div>
@@ -634,15 +639,28 @@ onBeforeUnmount(destroySortable)
           <div class="card-body">
             <h2 class="h6">Members</h2>
             <p v-if="isCompany" class="small text-muted">
-              Everyone on the site, added automatically when their account is created. Change someone's company role
-              here; to remove someone, ban their account.
+              Everyone on the site, added automatically when their account is created. To remove someone, deactivate
+              their account on the People page.
+            </p>
+            <p v-else-if="isCompanyMode" class="small text-muted">
+              People you add join right away and can open every project shared with this team. Someone whose site role
+              has "Manage team members' accounts" manages this team's people: they can create accounts for new members
+              and deactivate members who leave.
             </p>
             <p v-else class="small text-muted">These people are copied onto a project when you import this {{ orgNoun }}. Invites must be accepted before they join. After they accept they are added to copy and lock projects automatically.</p>
             <ul class="list-unstyled mb-3">
               <li v-for="m in members" :key="m.user_id" class="d-flex flex-wrap align-items-center gap-2 mb-2">
-                <span>{{ m.user_name || m.email }}</span>
-                <span class="badge text-bg-secondary">{{ m.role_name || m.role }}</span>
-                <template v-if="canManage && m.role !== 'owner'">
+                <span>{{ personLabel(m) }}</span>
+                <span v-if="!isCompanyMode" class="badge text-bg-secondary">{{ m.role_name || m.role }}</span>
+                <button
+                  v-if="isCompanyMode && canManage && !isCompany"
+                  class="btn btn-sm btn-outline-danger"
+                  type="button"
+                  @click="removeMember(m.user_id)"
+                >
+                  Remove
+                </button>
+                <template v-if="!isCompanyMode && canManage && m.role !== 'owner'">
                   <select
                     class="form-select form-select-sm w-auto"
                     :value="m.role"
@@ -654,7 +672,7 @@ onBeforeUnmount(destroySortable)
                 </template>
               </li>
             </ul>
-            <p v-if="canManage && !assignableRoles.length" class="small text-muted mb-2">
+            <p v-if="canManage && !assignableRoles.length && !isCompanyMode" class="small text-muted mb-2">
               This organization has no roles yet. Create one under Roles below, then invite people with it.
             </p>
             <form v-if="canManage && !isCompany" class="row g-2 align-items-end mb-3" @submit.prevent="inviteMember">
@@ -662,7 +680,7 @@ onBeforeUnmount(destroySortable)
                 <label class="form-label small mb-0">Username</label>
                 <UserSearchCombobox v-model="inviteUsername" :exclude-usernames="excludeUsernames" />
               </div>
-              <div class="col-sm-3">
+              <div v-if="!isCompanyMode" class="col-sm-3">
                 <label class="form-label small mb-0">Role</label>
                 <select v-model="inviteRole" class="form-select form-select-sm" required>
                   <option value="" disabled>Choose a role</option>
@@ -670,7 +688,9 @@ onBeforeUnmount(destroySortable)
                 </select>
               </div>
               <div class="col-sm-3">
-                <button class="btn btn-sm btn-primary w-100" type="submit" :disabled="!inviteRole">Invite</button>
+                <button class="btn btn-sm btn-primary w-100" type="submit" :disabled="!inviteRole && !isCompanyMode">
+                  {{ isCompanyMode ? 'Add' : 'Invite' }}
+                </button>
               </div>
             </form>
             <div v-if="invites.length">
@@ -690,7 +710,7 @@ onBeforeUnmount(destroySortable)
           </div>
         </div>
 
-        <div v-if="org" class="card mb-3">
+        <div v-if="org && !isCompanyMode" class="card mb-3">
           <div class="card-body">
             <div class="d-flex flex-wrap align-items-start justify-content-between gap-2 mb-2">
               <div>
@@ -723,7 +743,7 @@ onBeforeUnmount(destroySortable)
           </div>
         </div>
 
-        <div v-if="org" class="card">
+        <div v-if="org && !isCompanyMode" class="card">
           <div class="card-body">
             <h2 class="h6">Roles</h2>
             <p class="small text-muted">
@@ -878,7 +898,7 @@ onBeforeUnmount(destroySortable)
           <div class="modal-body pt-0">
             <p>
               Change
-              <strong>{{ roleChangeMember.user_name || roleChangeMember.email }}</strong>
+              <strong>{{ personLabel(roleChangeMember) }}</strong>
               from {{ roleChangeMember.role_name || roleChangeMember.role }}
               to {{ assignableRoles.find((r) => r.slug === roleChangeNext)?.name || roleChangeNext }}.
             </p>

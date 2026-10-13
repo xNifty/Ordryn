@@ -2,6 +2,9 @@ export type User = {
   id: number
   email: string
   user_name: string
+  /** Set in company mode by whoever manages names. */
+  first_name?: string
+  last_name?: string
   timezone: string
   items_per_page: number
   permissions: string[]
@@ -9,6 +12,12 @@ export type User = {
   username_change_available: boolean
   mfa_enabled: boolean
   avatar_url?: string
+  /** True when the user can create or deactivate anyone's account (admin, Manage people, or a team manager). */
+  manages_people?: boolean
+  /** The one account above admins: only it can make, change, or deactivate admins. */
+  is_site_owner?: boolean
+  /** Company mode: names are managed, and only some people may set their own. */
+  can_edit_name?: boolean
 }
 
 export type MFARequired = {
@@ -193,6 +202,8 @@ export type ProjectMember = {
   user_id: number
   email: string
   user_name: string
+  /** "First Last" when the person has a name (company mode). */
+  full_name?: string
   role: string
   role_name?: string
   inherited?: boolean
@@ -487,6 +498,24 @@ export type SiteInfo = {
   attachments_enabled?: boolean
   attachment_max_bytes?: number
   site_mode?: SiteMode
+  /** True until first-time setup creates the admin account. */
+  setup_required?: boolean
+}
+
+/** Who may create an account after setup: invite only, anyone, or nobody. */
+export type SetupRegistration = 'invite' | 'open' | 'closed'
+
+export type SetupPayload = {
+  setup_token: string
+  email: string
+  user_name: string
+  password: string
+  confirm_password: string
+  timezone: string
+  site_name: string
+  site_mode: SiteMode
+  registration: SetupRegistration
+  enable_api: boolean
 }
 
 /** multi: anyone may create organizations. company: one company with admin-created teams. */
@@ -706,6 +735,8 @@ export type AdminSettings = {
   site_mode: SiteMode
   /** True once projects or organizations exist; site_mode can no longer change. */
   site_mode_locked: boolean
+  /** Markdown shown in company mode to signed-in people with no projects yet. */
+  company_home: string
   allow_user_invites: boolean
   user_invite_limit: number
   invite_expiration_days: number
@@ -1024,15 +1055,101 @@ export type AdminUser = {
   id: number
   email: string
   user_name: string
+  full_name?: string
   is_banned: boolean
   role_id: number
   role_name: string
+  is_owner?: boolean
+}
+
+/** One share of a company-mode project with a team or a person. */
+export type ProjectShare = {
+  id: number
+  kind: 'team' | 'person'
+  team_id?: number
+  user_id?: number
+  name: string
+  email?: string
+  /** The person's username (person shares); name may be their full name. */
+  user_name?: string
+  /** full: a role applies (role_id, or each person's own site role). view: they can open the project but not change it. */
+  level: 'full' | 'view'
+  /** The role a full share gives on this project; absent means each person's own site role. */
+  role_id?: number
+  role_label?: string
+  is_company?: boolean
+  member_count?: number
+  created_at: string
+}
+
+export type ProjectAccess = {
+  shares: ProjectShare[]
+  can_manage: boolean
+  /** Teams the project can be shared with (only filled in for people who can share it). */
+  teams: { id: number; name: string; is_company: boolean }[]
+  /** Roles a full share can give (only filled in for people who can share it). */
+  roles: { id: number; label: string }[]
+}
+
+/** An account as listed on the People page. */
+export type Person = {
+  id: number
+  email: string
+  user_name: string
+  /** "First Last", empty when no name is set. */
+  full_name: string
+  first_name: string
+  last_name: string
+  active: boolean
+  role_id: number
+  role_name: string
+  teams: { id: number; name: string; role: string; role_name: string }[]
+  /** Whether the caller may deactivate or reactivate this account. */
+  can_manage: boolean
+  /** Whether the caller may set this person's first and last name (company mode). */
+  can_edit_name: boolean
+  is_owner?: boolean
+}
+
+export type PeopleList = {
+  people: Person[]
+  /** Admins and the Manage people permission reach every account; team managers only their teams. */
+  manages_everyone: boolean
+  /** False for those who only edit names. */
+  can_create: boolean
+  /** Company mode: new accounts need a first and last name. */
+  names_required: boolean
+  /** Company-mode teams the caller may add a new account to. */
+  teams: { id: number; name: string }[]
+  /** Site roles the caller may give a new account; empty means the default User role only. */
+  site_roles: { id: number; name: string; label: string }[]
+}
+
+export type CreatePersonPayload = {
+  email: string
+  user_name: string
+  first_name?: string
+  last_name?: string
+  team_id?: number
+  site_role_id?: number
+}
+
+export type CreatePersonResult = {
+  ok: boolean
+  user_id: number
+  email_sent: boolean
+  /** Present when email isn't configured: the creator passes this link on. */
+  set_password_url?: string
+  warning?: string
 }
 
 /** A site-wide role (Admin, User, or custom). Separate from project and organization roles. */
 export type SiteRole = {
   id: number
+  /** Stored name; fixed as 'admin' and 'user' for the built-in roles. */
   name: string
+  /** Name to show. Built-in roles are renamed by label (company mode only). */
+  label: string
   permissions: string[]
   user_count: number
   built_in: boolean
@@ -1404,6 +1521,8 @@ export type OrganizationMember = {
   user_id: number
   email: string
   user_name: string
+  /** "First Last" when the person has a name (company mode). */
+  full_name?: string
   role: string
   role_name?: string
   created_at?: string

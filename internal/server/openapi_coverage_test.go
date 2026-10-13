@@ -14,6 +14,13 @@ import (
 var requiredOpenAPIPaths = []string{
 	"/api/v2/health",
 	"/api/v2/site",
+	"/api/v2/setup",
+	"/api/v2/people",
+	"/api/v2/projects/{id}/access",
+	"/api/v2/projects/{id}/access/{shareId}",
+	"/api/v2/people/{id}/deactivate",
+	"/api/v2/people/{id}/reactivate",
+	"/api/v2/admin/users/{id}/owner",
 	"/api/v2/auth/register",
 	"/api/v2/auth/login",
 	"/api/v2/auth/mfa/verify",

@@ -43,6 +43,11 @@ const router = createRouter({
       component: () => import('@/views/ShareView.vue'),
     },
     {
+      path: '/setup',
+      name: 'setup',
+      component: () => import('@/views/SetupView.vue'),
+    },
+    {
       path: '/login',
       name: 'login',
       component: () => import('@/views/LoginView.vue'),
@@ -138,6 +143,12 @@ const router = createRouter({
       redirect: (to) => ({ name: 'calendar', query: { month: String(to.params.month) } }),
     },
     {
+      path: '/people',
+      name: 'people',
+      component: () => import('@/views/PeopleView.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
       path: '/settings',
       name: 'settings',
       component: () => import('@/views/SettingsView.vue'),
@@ -160,13 +171,13 @@ const router = createRouter({
       path: '/admin',
       name: 'admin',
       component: () => import('@/views/AdminView.vue'),
-      meta: { requiresAuth: true, permission: 'admin' },
+      meta: { requiresAuth: true, permission: 'settings:manage' },
     },
     {
       path: '/admin/extensions',
       name: 'admin-extensions',
       component: () => import('@/views/AdminExtensionsView.vue'),
-      meta: { requiresAuth: true, permission: 'admin' },
+      meta: { requiresAuth: true, permission: 'settings:manage' },
     },
     {
       path: '/admin/mods',
@@ -194,25 +205,25 @@ const router = createRouter({
       path: '/admin/site-roles',
       name: 'admin-site-roles',
       component: () => import('@/views/AdminSiteRolesView.vue'),
-      meta: { requiresAuth: true, permission: 'admin' },
+      meta: { requiresAuth: true, permission: 'roles:manage' },
     },
     {
       path: '/admin/audit',
       name: 'admin-audit',
       component: () => import('@/views/AdminAuditView.vue'),
-      meta: { requiresAuth: true, permission: 'admin' },
+      meta: { requiresAuth: true, permission: 'audit:view' },
     },
     {
       path: '/admin/email-audit',
       name: 'admin-email-audit',
       component: () => import('@/views/AdminEmailAuditView.vue'),
-      meta: { requiresAuth: true, permission: 'admin' },
+      meta: { requiresAuth: true, permission: 'audit:view' },
     },
     {
       path: '/admin/comment-audit',
       name: 'admin-comment-audit',
       component: () => import('@/views/AdminCommentAuditView.vue'),
-      meta: { requiresAuth: true, permission: 'admin' },
+      meta: { requiresAuth: true, permission: 'audit:view' },
     },
     {
       path: '/admin/invites',
@@ -238,6 +249,17 @@ router.beforeEach(async (to) => {
   const auth = useAuth()
   if (!auth.bootstrapped.value) {
     await auth.refresh()
+  }
+  const site = useSite()
+  if (!site.loaded.value) {
+    await site.refresh()
+  }
+  // A fresh install has no accounts, so every page leads to first-time setup until it's done.
+  if (site.setupRequired.value) {
+    return to.name === 'setup' ? true : { name: 'setup' }
+  }
+  if (to.name === 'setup') {
+    return { name: auth.isAuthenticated.value ? 'tasks' : 'login' }
   }
   if (to.meta.requiresAuth && !auth.isAuthenticated.value) {
     // Only preserve non-default destinations; `/` is the post-login default.
@@ -278,11 +300,12 @@ router.beforeEach(async (to) => {
   if (to.name === 'claim-username' && auth.isAuthenticated.value && !auth.needsUsernameClaim.value) {
     return { name: 'tasks' }
   }
+  // Company accounts come only from people managers: no signup, join requests, or invites.
+  const companyClosed = ['register', 'join', 'invites', 'admin-invites', 'admin-requests']
+  if (site.isCompanyMode.value && companyClosed.includes(String(to.name))) {
+    return { name: auth.isAuthenticated.value ? 'tasks' : 'login' }
+  }
   if (to.name === 'invites') {
-    const site = useSite()
-    if (!site.loaded.value) {
-      await site.refresh()
-    }
     const canInvite =
       auth.hasPermission('admin') ||
       auth.hasPermission('createinvites') ||
@@ -292,8 +315,13 @@ router.beforeEach(async (to) => {
     }
   }
 
+  if (to.name === 'people' && !auth.managesPeople.value) {
+    return { name: 'tasks' }
+  }
+
+  // Site permissions: admin implies every one.
   const permission = to.meta.permission as string | undefined
-  if (permission && !auth.hasPermission(permission)) {
+  if (permission && !auth.hasSitePermission(permission)) {
     return { name: 'tasks' }
   }
   return true

@@ -183,7 +183,7 @@ func ListUserNotifications(userID, limit, offset int) ([]UserNotification, int, 
 		`SELECT n.id, n.user_id, COALESCE(n.actor_user_id, 0), n.type,
 		        COALESCE(n.project_id, 0), COALESCE(n.task_id, 0),
 		        n.title, n.body, n.read_at, n.created_at,
-		        COALESCE(u.user_name, u.email, ''),
+		        COALESCE(NULLIF(u.full_name, ''), NULLIF(u.user_name, ''), u.email, ''),
 		        COALESCE(p.name, '')
 		 FROM user_notifications n
 		 LEFT JOIN users u ON u.id = n.actor_user_id

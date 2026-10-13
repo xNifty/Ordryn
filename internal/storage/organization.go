@@ -40,6 +40,7 @@ type OrganizationMember struct {
 	UserID    int
 	Email     string
 	UserName  string
+	FullName  string
 	Role      string
 	CreatedAt time.Time
 }
@@ -201,6 +202,24 @@ func CreateOrganization(createdBy int, name, description string) (*Organization,
 	return GetAccessibleOrganization(id, createdBy)
 }
 
+// CreateTeam inserts a company-mode team. Unlike CreateOrganization nobody is made its
+// owner, so the creator isn't on the team unless someone adds them.
+func CreateTeam(createdBy int, name, description string) (*Organization, error) {
+	pool, err := OpenDatabase()
+	if err != nil {
+		return nil, err
+	}
+	defer CloseDatabase(pool)
+
+	var id int
+	if err := pool.QueryRow(context.Background(),
+		`INSERT INTO organizations (name, description, created_by) VALUES ($1, $2, $3) RETURNING id`,
+		name, description, createdBy).Scan(&id); err != nil {
+		return nil, fmt.Errorf("failed to create team: %v", err)
+	}
+	return GetOrganizationWithRole(id, createdBy)
+}
+
 // CountOrganizationsCreatedBy returns how many orgs a user created.
 func CountOrganizationsCreatedBy(userID int) (int, error) {
 	pool, err := OpenDatabase()
@@ -262,6 +281,55 @@ func GetAccessibleOrganization(orgID, userID int) (*Organization, error) {
 		return nil, err
 	}
 	return &o, nil
+}
+
+// GetOrganizationWithRole loads an organization with the user's role on it, which is
+// empty when they aren't a member.
+func GetOrganizationWithRole(orgID, userID int) (*Organization, error) {
+	pool, err := OpenDatabase()
+	if err != nil {
+		return nil, err
+	}
+	defer CloseDatabase(pool)
+
+	var o Organization
+	err = scanOrganization(pool.QueryRow(context.Background(),
+		organizationSelect+`
+		 LEFT JOIN organization_members om ON om.organization_id = o.id AND om.user_id = $2
+		 WHERE o.id = $1`, orgID, userID), &o)
+	if err != nil {
+		return nil, err
+	}
+	return &o, nil
+}
+
+// ListAllOrganizationsWithRole lists every organization with the user's role on each
+// (empty where they aren't a member).
+func ListAllOrganizationsWithRole(userID int) ([]Organization, error) {
+	pool, err := OpenDatabase()
+	if err != nil {
+		return nil, err
+	}
+	defer CloseDatabase(pool)
+
+	rows, err := pool.Query(context.Background(),
+		organizationSelect+`
+		 LEFT JOIN organization_members om ON om.organization_id = o.id AND om.user_id = $1
+		 ORDER BY LOWER(o.name) ASC, o.id ASC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []Organization
+	for rows.Next() {
+		var o Organization
+		if err := scanOrganization(rows, &o); err != nil {
+			return nil, err
+		}
+		out = append(out, o)
+	}
+	return out, rows.Err()
 }
 
 // GetOrganizationByID loads an organization without membership checks.
@@ -342,6 +410,27 @@ func DeleteOrganization(orgID int) error {
 		 WHERE organization_id = $1`, orgID, OrgImportSelect); err != nil {
 		return err
 	}
+	// Deleting the team drops its shares; those projects lose its members afterwards.
+	var shared []int
+	if IsCompanyMode() {
+		rows, err := tx.Query(context.Background(),
+			`SELECT DISTINCT project_id FROM project_access_grants WHERE organization_id = $1`, orgID)
+		if err != nil {
+			return err
+		}
+		for rows.Next() {
+			var id int
+			if err := rows.Scan(&id); err != nil {
+				rows.Close()
+				return err
+			}
+			shared = append(shared, id)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return err
+		}
+	}
 	tag, err := tx.Exec(context.Background(), `DELETE FROM organizations WHERE id = $1`, orgID)
 	if err != nil {
 		return err
@@ -349,7 +438,15 @@ func DeleteOrganization(orgID int) error {
 	if tag.RowsAffected() == 0 {
 		return fmt.Errorf("organization not found")
 	}
-	return tx.Commit(context.Background())
+	if err := tx.Commit(context.Background()); err != nil {
+		return err
+	}
+	for _, id := range shared {
+		if err := RecomputeCompanyProjectAccess(id); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // GetOrganizationRole returns the caller's org role, or empty if not a member.
@@ -382,7 +479,7 @@ func ListOrganizationMembers(orgID int) ([]OrganizationMember, error) {
 	defer CloseDatabase(pool)
 
 	rows, err := pool.Query(context.Background(), `
-		SELECT om.user_id, u.email, COALESCE(u.user_name, ''), om.role, om.created_at
+		SELECT om.user_id, u.email, COALESCE(u.user_name, ''), u.full_name, om.role, om.created_at
 		FROM organization_members om
 		JOIN users u ON u.id = om.user_id
 		WHERE om.organization_id = $1
@@ -396,7 +493,7 @@ func ListOrganizationMembers(orgID int) ([]OrganizationMember, error) {
 	var out []OrganizationMember
 	for rows.Next() {
 		var m OrganizationMember
-		if err := rows.Scan(&m.UserID, &m.Email, &m.UserName, &m.Role, &m.CreatedAt); err != nil {
+		if err := rows.Scan(&m.UserID, &m.Email, &m.UserName, &m.FullName, &m.Role, &m.CreatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, m)
@@ -436,7 +533,7 @@ func RemoveOrganizationMember(orgID, userID int) error {
 	if tag.RowsAffected() == 0 {
 		return fmt.Errorf("member not found or cannot remove owner")
 	}
-	return nil
+	return RecomputeCompanyProjectsForTeam(orgID)
 }
 
 // CountOrgMembersWithRole counts org memberships using slug, optionally limited to one org.
@@ -1085,6 +1182,39 @@ func AcceptOrganizationInvite(inviteID, userID int, userEmail string) ([]int, er
 		return nil, err
 	}
 	return projectIDs, nil
+}
+
+// AddOrganizationMember adds userID to the organization with role (or changes the role
+// of an existing non-owner member) and adds them to the organization's copy and lock
+// projects. It returns the projects they joined.
+func AddOrganizationMember(orgID, userID int, role string) ([]int, error) {
+	pool, err := OpenDatabase()
+	if err != nil {
+		return nil, err
+	}
+	defer CloseDatabase(pool)
+
+	ctx := context.Background()
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO organization_members (organization_id, user_id, role) VALUES ($1, $2, $3)
+		ON CONFLICT (organization_id, user_id) DO UPDATE SET role = EXCLUDED.role
+		WHERE organization_members.role <> 'owner'`, orgID, userID, role); err != nil {
+		return nil, err
+	}
+	projectIDs, err := addUserToAutoImportOrgProjectsTx(tx, orgID, userID, role)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+	return projectIDs, RecomputeCompanyProjectsForTeam(orgID)
 }
 
 func addUserToAutoImportOrgProjectsTx(tx pgx.Tx, orgID, userID int, role string) ([]int, error) {

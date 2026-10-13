@@ -4,15 +4,21 @@ import { RouterLink } from 'vue-router'
 import { api } from '@/api/client'
 import type { AdminSettings, AdminSettingsPatch, SiteMode } from '@/api/types'
 import { APIError } from '@/api/types'
+import { useAuth } from '@/composables/useAuth'
 import { useSite } from '@/composables/useSite'
 import { useToast } from '@/composables/useToast'
 import { useConfirm } from '@/composables/useConfirm'
 import TimezoneSelect from '@/components/TimezoneSelect.vue'
 import AdminSubnav from '@/components/AdminSubnav.vue'
+import RichBody from '@/components/RichBody.vue'
 
 const toast = useToast()
 const { askConfirm } = useConfirm()
 const { refresh: refreshSite } = useSite()
+// Site settings managers who aren't admins can't change the site mode or what the
+// User role may create.
+const { hasPermission } = useAuth()
+const isAdmin = computed(() => hasPermission('admin'))
 const siteModeChoice = ref<SiteMode>('multi')
 const siteModeBusy = ref(false)
 const busy = ref(false)
@@ -37,6 +43,7 @@ const settings = reactive<AdminSettings>({
   members_can_create_projects: true,
   members_can_create_organizations: true,
   site_mode: 'multi',
+  company_home: '',
   site_mode_locked: false,
   user_invite_limit: 5,
   invite_expiration_days: 7,
@@ -106,13 +113,18 @@ async function saveSettings() {
     const saved = await api.patchAdminSettings({
       site_name: settings.site_name,
       default_timezone: settings.default_timezone,
+      ...(settings.site_mode === 'company' ? { company_home: settings.company_home } : {}),
       show_changelog: settings.show_changelog,
       enable_registration: settings.enable_registration,
       invite_only: settings.invite_only,
       enable_join_requests: settings.enable_join_requests,
       allow_user_invites: settings.allow_user_invites,
-      members_can_create_projects: settings.members_can_create_projects,
-      members_can_create_organizations: settings.members_can_create_organizations,
+      ...(isAdmin.value
+        ? {
+            members_can_create_projects: settings.members_can_create_projects,
+            members_can_create_organizations: settings.members_can_create_organizations,
+          }
+        : {}),
       user_invite_limit: settings.user_invite_limit,
       invite_expiration_days: settings.invite_expiration_days,
       max_description_length: settings.max_description_length,
@@ -289,7 +301,7 @@ onMounted(load)
   <div class="container mt-3">
     <AdminSubnav />
     <h1>Admin</h1>
-    <div class="card mb-4" :class="{ 'border-primary': !settings.site_mode_locked }">
+    <div v-if="isAdmin" class="card mb-4" :class="{ 'border-primary': !settings.site_mode_locked }">
       <div class="card-header d-flex justify-content-between align-items-center">
         <h2 class="h5 mb-0">Site mode</h2>
         <span v-if="settings.site_mode_locked" class="badge text-bg-secondary">
@@ -354,61 +366,96 @@ onMounted(load)
             <label class="form-label">Meta description</label>
             <textarea v-model="settings.meta_description" class="form-control" rows="2" />
           </div>
-          <div class="form-check mb-2">
-            <input id="admin-registration" v-model="settings.enable_registration" class="form-check-input" type="checkbox" />
-            <label class="form-check-label" for="admin-registration">Enable registration</label>
-          </div>
-          <div class="form-check mb-2">
-            <input id="admin-invite-only" v-model="settings.invite_only" class="form-check-input" type="checkbox" />
-            <label class="form-check-label" for="admin-invite-only">Invite only</label>
-          </div>
-          <div class="form-check mb-2">
-            <input id="admin-join-requests" v-model="settings.enable_join_requests" class="form-check-input" type="checkbox" />
-            <label class="form-check-label" for="admin-join-requests">Enable join requests</label>
-          </div>
-          <div class="form-check mb-2">
-            <input id="admin-user-invites" v-model="settings.allow_user_invites" class="form-check-input" type="checkbox" />
-            <label class="form-check-label" for="admin-user-invites">Allow regular users to send invites</label>
-          </div>
-          <div v-if="settings.allow_user_invites" class="mb-3 ms-4">
-            <label for="admin-user-invite-limit" class="form-label">User invite limit</label>
-            <input
-              id="admin-user-invite-limit"
-              v-model.number="settings.user_invite_limit"
-              type="number"
-              class="form-control"
-              style="max-width: 12rem"
-              min="0"
+          <div v-if="settings.site_mode === 'company'" class="mb-3">
+            <label for="admin-company-home" class="form-label">Home page</label>
+            <textarea
+              id="admin-company-home"
+              v-model="settings.company_home"
+              class="form-control font-monospace"
+              rows="8"
+              maxlength="20000"
+              aria-describedby="admin-company-home-help"
             />
-            <div class="form-text">Maximum number of invites each regular user can send.</div>
-          </div>
-          <div class="mb-3">
-            <label for="admin-invite-expiration-days" class="form-label">Default invite expiration (days)</label>
-            <input
-              id="admin-invite-expiration-days"
-              v-model.number="settings.invite_expiration_days"
-              type="number"
-              class="form-control"
-              style="max-width: 12rem"
-              min="0"
-            />
-            <div class="form-text">Days before a sent invite expires. Set to 0 for invites that never expire.</div>
-          </div>
-          <div class="form-check mb-2">
-            <input id="admin-members-create-projects" v-model="settings.members_can_create_projects" class="form-check-input" type="checkbox" />
-            <label class="form-check-label" for="admin-members-create-projects">Allow regular users to create projects</label>
-          </div>
-          <div class="form-check mb-3">
-            <input id="admin-members-create-orgs" v-model="settings.members_can_create_organizations" class="form-check-input" type="checkbox" />
-            <label class="form-check-label" for="admin-members-create-orgs">
-              Allow regular users to create {{ settings.site_mode === 'company' ? 'teams' : 'organizations' }}
-            </label>
-            <div class="form-text">
-              These apply to the User role. Admins can always create both, and you can give other roles
-              these abilities on <RouterLink to="/admin/site-roles">Site roles</RouterLink>. Turning these off
-              doesn't affect existing projects or organizations.
+            <div id="admin-company-home-help" class="form-text">
+              Markdown shown to signed-in people who aren't on any project yet, such as a welcome message, who to ask
+              for access, or links to company resources. Every task belongs to a project, so new people see this until
+              a project is shared with them or their team.
             </div>
+            <details v-if="settings.company_home.trim()" class="mt-2">
+              <summary class="small">Preview</summary>
+              <div class="card card-body mt-2"><RichBody :body="settings.company_home" /></div>
+            </details>
           </div>
+          <p v-if="settings.site_mode === 'company'" class="small mb-3">
+            <span class="fw-semibold d-block">Accounts</span>
+            <span class="text-muted">
+              Company sites have no self-signup or invites. Admins, roles with "Manage people", and team managers create
+              and deactivate accounts on the <RouterLink to="/people">People</RouterLink> page.
+            </span>
+          </p>
+          <template v-else>
+            <div class="form-check mb-2">
+              <input id="admin-registration" v-model="settings.enable_registration" class="form-check-input" type="checkbox" />
+              <label class="form-check-label" for="admin-registration">Enable registration</label>
+            </div>
+            <div class="form-check mb-2">
+              <input id="admin-invite-only" v-model="settings.invite_only" class="form-check-input" type="checkbox" />
+              <label class="form-check-label" for="admin-invite-only">Invite only</label>
+            </div>
+            <div class="form-check mb-2">
+              <input id="admin-join-requests" v-model="settings.enable_join_requests" class="form-check-input" type="checkbox" />
+              <label class="form-check-label" for="admin-join-requests">Enable join requests</label>
+            </div>
+            <div class="form-check mb-2">
+              <input id="admin-user-invites" v-model="settings.allow_user_invites" class="form-check-input" type="checkbox" />
+              <label class="form-check-label" for="admin-user-invites">Allow regular users to send invites</label>
+            </div>
+            <div v-if="settings.allow_user_invites" class="mb-3 ms-4">
+              <label for="admin-user-invite-limit" class="form-label">User invite limit</label>
+              <input
+                id="admin-user-invite-limit"
+                v-model.number="settings.user_invite_limit"
+                type="number"
+                class="form-control"
+                style="max-width: 12rem"
+                min="0"
+              />
+              <div class="form-text">Maximum number of invites each regular user can send.</div>
+            </div>
+            <div class="mb-3">
+              <label for="admin-invite-expiration-days" class="form-label">Default invite expiration (days)</label>
+              <input
+                id="admin-invite-expiration-days"
+                v-model.number="settings.invite_expiration_days"
+                type="number"
+                class="form-control"
+                style="max-width: 12rem"
+                min="0"
+              />
+              <div class="form-text">Days before a sent invite expires. Set to 0 for invites that never expire.</div>
+            </div>
+          </template>
+          <p v-if="settings.site_mode === 'company'" class="small text-muted mb-3">
+            Who can create projects and teams, and what everyone can do on projects shared with them, is set per role on
+            <RouterLink to="/admin/site-roles">Site roles</RouterLink>.
+          </p>
+          <template v-else-if="isAdmin">
+            <div class="form-check mb-2">
+              <input id="admin-members-create-projects" v-model="settings.members_can_create_projects" class="form-check-input" type="checkbox" />
+              <label class="form-check-label" for="admin-members-create-projects">Allow regular users to create projects</label>
+            </div>
+            <div class="form-check mb-3">
+              <input id="admin-members-create-orgs" v-model="settings.members_can_create_organizations" class="form-check-input" type="checkbox" />
+              <label class="form-check-label" for="admin-members-create-orgs">
+                Allow regular users to create organizations
+              </label>
+              <div class="form-text">
+                These apply to the User role. Admins can always create both, and you can give other roles
+                these abilities on <RouterLink to="/admin/site-roles">Site roles</RouterLink>. Turning these off
+                doesn't affect existing projects or organizations.
+              </div>
+            </div>
+          </template>
           <div class="row g-3 mb-3">
             <div class="col-sm-6">
               <label for="admin-max-description" class="form-label">Max task description length</label>

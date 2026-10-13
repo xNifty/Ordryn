@@ -103,6 +103,9 @@ func CreateProjectForUser(ctx context.Context, userID int, in CreateProjectInput
 		return nil, fmt.Errorf("%w: you don't have permission to create projects", ErrForbidden)
 	}
 	var spec *storage.OrgImportSpec
+	if in.OrganizationID != nil && *in.OrganizationID > 0 && storage.IsCompanyMode() {
+		return nil, fmt.Errorf("%w: in company mode, create the project and then share it with teams", ErrValidation)
+	}
 	if in.OrganizationID != nil && *in.OrganizationID > 0 {
 		org, err := requireOrgManage(*in.OrganizationID, userID)
 		if err != nil {
@@ -143,6 +146,10 @@ func companyProjectSpec() (*storage.OrgImportSpec, error) {
 func createProject(userID int, name, description string, spec *storage.OrgImportSpec) (*storage.Project, error) {
 	proj, err := storage.CreateProjectWithOrg(userID, name, description, spec)
 	if err != nil {
+		return nil, err
+	}
+	// Company projects start with their creator and the site admins.
+	if err := storage.RecomputeCompanyProjectAccess(proj.ID); err != nil {
 		return nil, err
 	}
 	live.AfterProjectChange(userID, proj.ID, live.TypeProjectCreated)
@@ -352,6 +359,19 @@ func DeleteProject(ctx context.Context, userID, projectID int) error {
 	}
 	if !storage.RoleCanManageProject(proj.ID, proj.Role) {
 		return ErrForbidden
+	}
+	// Tasks outlive a deleted project with no project, which company mode doesn't allow.
+	if storage.IsCompanyMode() {
+		n, err := storage.CountProjectTasks(projectID)
+		if err != nil {
+			return err
+		}
+		if n > 0 {
+			return fmt.Errorf("%w: this project still has %d tasks; archive it instead, or move or delete its tasks first", ErrConflict, n)
+		}
+		if err := storage.PurgeTrashedProjectTasks(projectID); err != nil {
+			return err
+		}
 	}
 	// Membership cascades with the project, so capture the live audience first.
 	members, _ := storage.ProjectMemberUserIDs(projectID)

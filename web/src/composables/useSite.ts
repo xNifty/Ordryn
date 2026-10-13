@@ -22,6 +22,7 @@ const metaDescription = computed(() => siteInfo.value?.meta_description?.trim() 
 const enableJoinRequests = computed(() => !!siteInfo.value?.enable_join_requests)
 // Company mode: one company everyone belongs to, with admin-created teams instead of organizations.
 const isCompanyMode = computed(() => siteInfo.value?.site_mode === 'company')
+const setupRequired = computed(() => !!siteInfo.value?.setup_required)
 const openJoin = computed(
   () => !!siteInfo.value?.enable_registration && !siteInfo.value?.invite_only,
 )
@@ -52,6 +53,7 @@ export function useSite() {
     metaDescription,
     enableJoinRequests,
     isCompanyMode,
+    setupRequired,
     openJoin,
     loaded,
     refresh,

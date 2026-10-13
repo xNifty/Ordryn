@@ -149,6 +149,13 @@ func SyncCompanyMembers() (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	if tag.RowsAffected() > 0 {
+		if id, err := CompanyOrganizationID(); err == nil && id > 0 {
+			if err := RecomputeCompanyProjectsForTeam(id); err != nil {
+				return int(tag.RowsAffected()), err
+			}
+		}
+	}
 	return int(tag.RowsAffected()), nil
 }
 
@@ -173,7 +180,11 @@ func JoinCompanyIfEnabled(userID int) error {
 		INSERT INTO organization_members (organization_id, user_id, role)
 		SELECT $1, u.id, $3 FROM users u WHERE u.id = $2 AND NOT COALESCE(u.is_agent, FALSE)
 		ON CONFLICT DO NOTHING`, orgID, userID, CompanyMemberRole)
-	return err
+	if err != nil {
+		return err
+	}
+	// Projects shared with the whole company now include them.
+	return RecomputeCompanyProjectsForTeam(orgID)
 }
 
 // deleteCompanyOrganization removes the company. Only valid while the mode is unlocked,
@@ -205,14 +216,71 @@ func ChangeSiteMode(mode string) error {
 	switch {
 	case after == SiteModeCompany:
 		if before != SiteModeCompany {
-			if err := SetRolePermission(MemberRoleName, SitePermOrgsCreate, false); err != nil {
+			if err := seedCompanySiteRoles(); err != nil {
 				return err
 			}
 		}
-		return EnsureCompanyReady()
+		if err := EnsureCompanyReady(); err != nil {
+			return err
+		}
+		return RecomputeAllCompanyProjects()
 	case before == SiteModeCompany:
 		return deleteCompanyOrganization()
 	}
+	return nil
+}
+
+// companyMemberPerms is what the default User role can do on the projects shared
+// with them, once the site is a company.
+var companyMemberPerms = []string{
+	PermTasksCreate, PermTasksEdit, PermTasksComplete, PermTasksClaim,
+	PermTasksReorder, PermTasksStatus, PermTasksSprint, PermTimeWrite,
+}
+
+// seedCompanySiteRoles prepares the site roles for company mode, where they are the
+// only roles: nobody creates organizations, the User role gets everyday task
+// permissions, and the default company roles are added unless a role already has the
+// name. Admins can rename them or change their permissions afterwards.
+func seedCompanySiteRoles() error {
+	pool, err := OpenDatabase()
+	if err != nil {
+		return err
+	}
+	defer CloseDatabase(pool)
+
+	ctx := context.Background()
+	if _, err := pool.Exec(ctx, `UPDATE roles SET permissions = array_remove(permissions, $1::text)`, SitePermOrgsCreate); err != nil {
+		return err
+	}
+	for _, perm := range companyMemberPerms {
+		if err := SetRolePermission(MemberRoleName, perm, true); err != nil {
+			return err
+		}
+	}
+	manager := append([]string{
+		SitePermProjectsCreate, SitePermTeamPeople,
+		PermTasksDelete, PermTasksArchive, PermTasksRestore, PermProjectManage, PermProjectTags,
+		PermCommentsModerate, PermInsightsPeople,
+	}, companyMemberPerms...)
+	defaults := []struct {
+		name  string
+		perms []string
+	}{
+		// Runs projects it's given on a share; no site-wide powers.
+		{"Project Administrator", AllProjectPerms()},
+		// Does the work on the projects shared with them.
+		{"Contributor", companyMemberPerms},
+		// Follows along without changing anything.
+		{"Reader", []string{}},
+		// Leads a team: hires onto it and runs its projects.
+		{"Manager", manager},
+	}
+	for _, d := range defaults {
+		if _, err := CreateSiteRole(d.name, d.perms); err != nil && !errors.Is(err, ErrSiteRoleNameTaken) {
+			return err
+		}
+	}
+	InvalidateCompanyRoleCache()
 	return nil
 }
 

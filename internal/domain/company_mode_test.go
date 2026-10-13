@@ -145,22 +145,31 @@ func TestCompanyMode(t *testing.T) {
 	if team.IsCompany {
 		t.Fatal("a team must not be the company")
 	}
-	tid := team.ID
-	teamProj, err := CreateProjectForUser(ctx, admin, CreateProjectInput{
-		Name: "Team board", OrganizationID: &tid, ImportMode: storage.OrgImportCopy,
-	})
+	teamProj, err := CreateProject(ctx, admin, "Team board", "")
 	if err != nil {
 		t.Fatalf("team project: %v", err)
 	}
+	if err := ShareProjectForUser(ctx, admin, teamProj.ID, ProjectShareInput{TeamID: team.ID}); err != nil {
+		t.Fatalf("share with team: %v", err)
+	}
+	if _, err := storage.AddOrganizationMember(team.ID, bob, storage.CompanyMemberRole); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := storage.GetAccessibleProjectByID(teamProj.ID, bob); err != nil {
+		t.Fatalf("joining a team should open its projects: %v", err)
+	}
 	if err := DeleteOrganizationForUser(ctx, admin, team.ID); err != nil {
 		t.Fatalf("delete team: %v", err)
+	}
+	if _, err := storage.GetAccessibleProjectByID(teamProj.ID, bob); err == nil {
+		t.Fatal("deleting the team should take its projects away from its members")
 	}
 	moved, err := storage.GetProjectByID(teamProj.ID, admin)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if moved.OrganizationID == nil || *moved.OrganizationID != companyID {
-		t.Fatalf("after deleting its team, project organization = %v; want the company", moved.OrganizationID)
+		t.Fatalf("project organization = %v; want the company", moved.OrganizationID)
 	}
 
 	// Deleting the account that created the company must not delete the company.
@@ -190,5 +199,69 @@ func TestMultiModeProjectsStayPersonal(t *testing.T) {
 	}
 	if proj.OrganizationID != nil {
 		t.Fatalf("multi mode project organization = %v, want none", *proj.OrganizationID)
+	}
+}
+
+func TestCompanyModeRenamesBuiltInRoles(t *testing.T) {
+	useFreshDatabase(t, "gotodo_company_role_names_test")
+	ctx := context.Background()
+
+	admin := insertUserWithRole(t, "boss@example.com", storage.AdminRoleName)
+	userRoleID, err := storage.GetRoleIDByName(storage.MemberRoleName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	adminRoleID, err := storage.GetRoleIDByName(storage.AdminRoleName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	staff := "Staff"
+	if _, err := UpdateSiteRoleForAdmin(ctx, admin, userRoleID, &staff, nil); !errors.Is(err, ErrValidation) {
+		t.Fatalf("rename User outside company mode: err=%v, want ErrValidation", err)
+	}
+
+	if err := storage.ChangeSiteMode(storage.SiteModeCompany); err != nil {
+		t.Fatalf("enter company mode: %v", err)
+	}
+	renamed, err := UpdateSiteRoleForAdmin(ctx, admin, userRoleID, &staff, nil)
+	if err != nil {
+		t.Fatalf("rename User: %v", err)
+	}
+	if renamed.Name != storage.MemberRoleName || renamed.Label() != "Staff" {
+		t.Fatalf("renamed User = name %q label %q, want name kept and label Staff", renamed.Name, renamed.Label())
+	}
+	// Lookups by stored name keep working: new accounts still land on this role.
+	if id, err := storage.GetRoleIDByName(storage.MemberRoleName); err != nil || id != userRoleID {
+		t.Fatalf("member role lookup = %d, %v; want %d", id, err, userRoleID)
+	}
+
+	owner := "Owner"
+	if _, err := UpdateSiteRoleForAdmin(ctx, admin, adminRoleID, &owner, nil); err != nil {
+		t.Fatalf("rename Admin: %v", err)
+	}
+	perms := []string{}
+	if _, err := UpdateSiteRoleForAdmin(ctx, admin, adminRoleID, nil, &perms); !errors.Is(err, ErrValidation) {
+		t.Fatalf("edit Admin permissions: err=%v, want ErrValidation", err)
+	}
+	if !storage.UserHasSitePermission(admin, storage.SitePermAdmin) {
+		t.Fatal("renaming Admin must not change what it grants")
+	}
+
+	// Labels and stored names are both taken; a freed default label is reusable.
+	if _, err := CreateSiteRoleForAdmin(ctx, admin, "staff", nil); !errors.Is(err, ErrConflict) {
+		t.Fatalf("create role named like a label: err=%v, want ErrConflict", err)
+	}
+	if _, err := CreateSiteRoleForAdmin(ctx, admin, "user", nil); !errors.Is(err, ErrConflict) {
+		t.Fatalf("create role named like a stored name: err=%v, want ErrConflict", err)
+	}
+
+	// Setting the default label back clears the rename.
+	userLabel := "User"
+	back, err := UpdateSiteRoleForAdmin(ctx, admin, userRoleID, &userLabel, nil)
+	if err != nil {
+		t.Fatalf("rename back: %v", err)
+	}
+	if back.DisplayName != "" || back.Label() != "User" {
+		t.Fatalf("renamed back = display %q label %q, want cleared", back.DisplayName, back.Label())
 	}
 }

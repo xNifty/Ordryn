@@ -20,8 +20,10 @@ type apiSitePermJSON struct {
 }
 
 type apiSiteRoleJSON struct {
-	ID          int      `json:"id"`
-	Name        string   `json:"name"`
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+	// Label is the name to show; built-in roles keep a fixed name and are renamed by label.
+	Label       string   `json:"label"`
 	Permissions []string `json:"permissions"`
 	UserCount   int      `json:"user_count"`
 	BuiltIn     bool     `json:"built_in"`
@@ -51,6 +53,7 @@ func siteRoleToJSON(r storage.SiteRole) apiSiteRoleJSON {
 	return apiSiteRoleJSON{
 		ID:          r.ID,
 		Name:        r.Name,
+		Label:       r.Label(),
 		Permissions: perms,
 		UserCount:   r.UserCount,
 		BuiltIn:     r.BuiltIn(),
@@ -137,15 +140,15 @@ func APIV1AdminSiteRolesRouter(w http.ResponseWriter, r *http.Request) {
 		}
 		meta := map[string]interface{}{}
 		if before != nil {
-			if before.Name != updated.Name {
-				meta["name"] = map[string]interface{}{"from": before.Name, "to": updated.Name}
+			if before.Label() != updated.Label() {
+				meta["name"] = map[string]interface{}{"from": before.Label(), "to": updated.Label()}
 			}
 			if strings.Join(before.Permissions, ",") != strings.Join(updated.Permissions, ",") {
 				meta["permissions"] = map[string]interface{}{"from": before.Permissions, "to": updated.Permissions}
 			}
 		}
 		if len(meta) > 0 {
-			logAdminEvent(r, "site_role_updated", "site_role", int64(updated.ID), updated.Name, meta)
+			logAdminEvent(r, "site_role_updated", "site_role", int64(updated.ID), updated.Label(), meta)
 		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		_ = json.NewEncoder(w).Encode(siteRoleToJSON(*updated))
@@ -155,7 +158,7 @@ func APIV1AdminSiteRolesRouter(w http.ResponseWriter, r *http.Request) {
 			writeProjectRoleDomainError(w, err)
 			return
 		}
-		logAdminEvent(r, "site_role_deleted", "site_role", int64(roleID), deleted.Name,
+		logAdminEvent(r, "site_role_deleted", "site_role", int64(roleID), deleted.Label(),
 			map[string]interface{}{"from": deleted.Permissions, "users_moved": moved})
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "users_moved": moved})
@@ -187,8 +190,8 @@ func apiV1AdminSetUserSiteRole(w http.ResponseWriter, r *http.Request, targetUse
 	}
 	if from.ID != to.ID {
 		logAdminEvent(r, "user_site_role_changed", "user", int64(targetUserID), storage.UserAuditLabel(targetUserID),
-			map[string]interface{}{"from": from.Name, "to": to.Name})
+			map[string]interface{}{"from": from.Label(), "to": to.Label()})
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	_ = json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "role_id": to.ID, "role_name": to.Name})
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "role_id": to.ID, "role_name": to.Label()})
 }

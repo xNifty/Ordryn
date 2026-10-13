@@ -10,6 +10,28 @@ const (
 	SitePermAdmin          = "admin"
 	SitePermProjectsCreate = "projects:create"
 	SitePermOrgsCreate     = "orgs:create"
+	// SitePermUsersManage creates accounts and deactivates or reactivates any account
+	// that is not an admin or another people manager.
+	SitePermUsersManage = "users:manage"
+	// SitePermTeamsManage creates and deletes company-mode teams and sets who is on them.
+	SitePermTeamsManage = "teams:manage"
+	// SitePermTeamPeople manages the accounts of people on the company-mode teams
+	// the holder is on (the Company team excluded).
+	SitePermTeamPeople = "team:people"
+
+	// Company-mode permissions split out of admin.
+
+	// SitePermProfilesEdit sets people's first and last names within the holder's
+	// people reach, and the holder's own.
+	SitePermProfilesEdit = "people:profile"
+	// SitePermProjectsViewAll opens every project read-only.
+	SitePermProjectsViewAll = "projects:view_all"
+	// SitePermAuditView reads the audit, comment, and email logs.
+	SitePermAuditView = "audit:view"
+	// SitePermRolesManage creates and edits site roles.
+	SitePermRolesManage = "roles:manage"
+	// SitePermSettingsManage changes site settings and extensions.
+	SitePermSettingsManage = "settings:manage"
 )
 
 // MemberRoleName is the site role every non-admin account gets.

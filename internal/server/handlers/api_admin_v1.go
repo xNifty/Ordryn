@@ -48,6 +48,8 @@ type adminSettingsJSON struct {
 	// SiteMode can change only while SiteModeLocked is false (no projects or organizations yet).
 	SiteMode       string `json:"site_mode"`
 	SiteModeLocked bool   `json:"site_mode_locked"`
+	// CompanyHome is Markdown shown in company mode to people with no projects yet.
+	CompanyHome string `json:"company_home"`
 
 	EmailProvider           string `json:"email_provider"`
 	EmailFromAddress        string `json:"email_from_address"`
@@ -104,7 +106,8 @@ type adminSettingsPatch struct {
 	MembersCanCreateProjects      *bool `json:"members_can_create_projects"`
 	MembersCanCreateOrganizations *bool `json:"members_can_create_organizations"`
 
-	SiteMode *string `json:"site_mode"`
+	SiteMode    *string `json:"site_mode"`
+	CompanyHome *string `json:"company_home"`
 
 	EmailProvider           *string `json:"email_provider"`
 	EmailFromAddress        *string `json:"email_from_address"`
@@ -176,6 +179,14 @@ func apiV1PatchAdminSettings(w http.ResponseWriter, r *http.Request) {
 	if err := decodeJSONBody(r, &req); err != nil {
 		utils.APIJSONError(w, http.StatusBadRequest, "invalid_request", "Invalid JSON body.")
 		return
+	}
+	// Site settings managers aren't admins: the site mode and what the User role may
+	// create stay with admins.
+	if req.SiteMode != nil || req.MembersCanCreateProjects != nil || req.MembersCanCreateOrganizations != nil {
+		if actorID, ok := apiUserFromRequest(r); !ok || !storage.UserHasSitePermission(actorID, storage.SitePermAdmin) {
+			utils.APIJSONError(w, http.StatusForbidden, "forbidden", "Only admins can change the site mode or what new accounts can create.")
+			return
+		}
 	}
 	next := *current
 	if req.SiteName != nil {
@@ -399,6 +410,11 @@ func apiV1PatchAdminSettings(w http.ResponseWriter, r *http.Request) {
 		utils.APIJSONError(w, http.StatusBadRequest, "invalid_request", errMsg)
 		return
 	}
+	if req.CompanyHome != nil && len([]rune(*req.CompanyHome)) > storage.MaxCompanyHomeLen {
+		utils.APIJSONError(w, http.StatusBadRequest, "invalid_request",
+			fmt.Sprintf("company_home must be %d characters or less.", storage.MaxCompanyHomeLen))
+		return
+	}
 	if req.SiteMode != nil {
 		mode := storage.NormalizeSiteMode(*req.SiteMode)
 		if mode == "" {
@@ -423,6 +439,12 @@ func apiV1PatchAdminSettings(w http.ResponseWriter, r *http.Request) {
 	if err := saveMemberCreatePerms(req); err != nil {
 		utils.APIJSONError(w, http.StatusInternalServerError, "internal_error", "Failed to save settings.")
 		return
+	}
+	if req.CompanyHome != nil {
+		if err := storage.SetCompanyHome(strings.TrimSpace(*req.CompanyHome)); err != nil {
+			utils.APIJSONError(w, http.StatusInternalServerError, "internal_error", "Failed to save settings.")
+			return
+		}
 	}
 	config.Cfg.SiteName = next.SiteName
 	config.Cfg.DefaultTimezone = next.DefaultTimezone
@@ -556,6 +578,7 @@ type adminSettingsExtras struct {
 	Projects       bool
 	Organizations  bool
 	SiteModeLocked bool
+	CompanyHome    string
 }
 
 func loadAdminSettingsExtras() (adminSettingsExtras, error) {
@@ -570,6 +593,9 @@ func loadAdminSettingsExtras() (adminSettingsExtras, error) {
 	if p.SiteModeLocked, err = storage.SiteModeLocked(); err != nil {
 		return p, err
 	}
+	if p.CompanyHome, err = storage.GetCompanyHome(); err != nil {
+		return p, err
+	}
 	return p, nil
 }
 
@@ -579,7 +605,8 @@ func saveMemberCreatePerms(req adminSettingsPatch) error {
 			return err
 		}
 	}
-	if req.MembersCanCreateOrganizations != nil {
+	// Nobody creates organizations in company mode; teams come from Manage teams.
+	if req.MembersCanCreateOrganizations != nil && !storage.IsCompanyMode() {
 		if err := storage.SetRolePermission(storage.MemberRoleName, storage.SitePermOrgsCreate, *req.MembersCanCreateOrganizations); err != nil {
 			return err
 		}
@@ -619,6 +646,7 @@ func adminSettingsView(s *storage.SiteSettings, perms adminSettingsExtras) admin
 		MembersCanCreateOrganizations: perms.Organizations,
 		SiteMode:                      s.SiteMode,
 		SiteModeLocked:                perms.SiteModeLocked,
+		CompanyHome:                   perms.CompanyHome,
 		EmailProvider:                 s.Email.Provider,
 		EmailFromAddress:              s.Email.FromAddress,
 		EmailFromName:                 s.Email.FromName,
@@ -660,15 +688,18 @@ func APIV1AdminUsersRouter(w http.ResponseWriter, r *http.Request) {
 			utils.APIJSONError(w, http.StatusInternalServerError, "internal_error", "Failed to list users.")
 			return
 		}
+		ownerID, _ := storage.SiteOwnerID()
 		out := make([]map[string]interface{}, 0, len(users))
 		for _, u := range users {
 			out = append(out, map[string]interface{}{
 				"id":        u.ID,
 				"email":     u.Email,
 				"user_name": u.UserName,
+				"full_name": u.FullName,
 				"is_banned": u.IsBanned,
 				"role_id":   u.RoleID,
 				"role_name": u.RoleName,
+				"is_owner":  u.ID == ownerID,
 			})
 		}
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -693,8 +724,9 @@ func APIV1AdminUsersRouter(w http.ResponseWriter, r *http.Request) {
 				utils.APIJSONError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Method not allowed.")
 				return
 			}
-			if err := storage.SetUserBanned(id, true); err != nil {
-				utils.APIJSONError(w, http.StatusNotFound, "not_found", "User not found.")
+			actorID, _ := apiUserFromRequest(r)
+			if err := domain.SetAccountActiveForUser(r.Context(), actorID, id, false); err != nil {
+				writePeopleDomainError(w, err)
 				return
 			}
 			logAdminEvent(r, "user_banned", "user", int64(id), storage.UserAuditLabel(id),
@@ -704,8 +736,9 @@ func APIV1AdminUsersRouter(w http.ResponseWriter, r *http.Request) {
 				utils.APIJSONError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Method not allowed.")
 				return
 			}
-			if err := storage.SetUserBanned(id, false); err != nil {
-				utils.APIJSONError(w, http.StatusNotFound, "not_found", "User not found.")
+			actorID, _ := apiUserFromRequest(r)
+			if err := domain.SetAccountActiveForUser(r.Context(), actorID, id, true); err != nil {
+				writePeopleDomainError(w, err)
 				return
 			}
 			logAdminEvent(r, "user_unbanned", "user", int64(id), storage.UserAuditLabel(id),
@@ -715,8 +748,25 @@ func APIV1AdminUsersRouter(w http.ResponseWriter, r *http.Request) {
 				utils.APIJSONError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Method not allowed.")
 				return
 			}
+			actorID, _ := apiUserFromRequest(r)
+			if err := domain.RequireCanEditAdminAccount(actorID, id); err != nil {
+				writePeopleDomainError(w, err)
+				return
+			}
 			apiV1AdminSetUsername(w, r, id)
 			return
+		case "owner":
+			if r.Method != http.MethodPost {
+				utils.APIJSONError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Method not allowed.")
+				return
+			}
+			actorID, _ := apiUserFromRequest(r)
+			if err := domain.TransferSiteOwnership(r.Context(), actorID, id); err != nil {
+				writePeopleDomainError(w, err)
+				return
+			}
+			logAdminEvent(r, "site_owner_transferred", "user", int64(id), storage.UserAuditLabel(id),
+				map[string]interface{}{"from": storage.UserAuditLabel(actorID), "to": storage.UserAuditLabel(id)})
 		case "role":
 			if r.Method != http.MethodPut {
 				utils.APIJSONError(w, http.StatusMethodNotAllowed, "method_not_allowed", "Method not allowed.")

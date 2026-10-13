@@ -326,7 +326,7 @@
                   <small class="text-muted">{{ description.length }}/1000</small>
                 </div>
               </div>
-              <div v-if="manageableOrgs.length" class="mb-3">
+              <div v-if="manageableOrgs.length && !isCompanyMode" class="mb-3">
                 <OrgImportFields
                   :orgs="manageableOrgs"
                   v-model:organization-id="organizationId"
@@ -364,6 +364,7 @@ import type { Organization, OrganizationInvite, OrgImportMember, OrgImportMode, 
 import { APIError } from '@/api/types'
 import { useToast } from '@/composables/useToast'
 import { useAuth } from '@/composables/useAuth'
+import { useSite } from '@/composables/useSite'
 import { useConfirm } from '@/composables/useConfirm'
 import ProjectSharePanel from '@/components/ProjectSharePanel.vue'
 import ProjectWorkflowPanel from '@/components/ProjectWorkflowPanel.vue'
@@ -388,6 +389,8 @@ const ownedTbodyEl = ref<HTMLElement | null>(null)
 let sortable: Sortable | null = null
 const toast = useToast()
 const auth = useAuth()
+// Company projects are shared with teams after they are created.
+const { isCompanyMode } = useSite()
 const { canCreateProjects } = auth
 const { askConfirm } = useConfirm()
 
