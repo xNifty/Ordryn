@@ -1459,6 +1459,7 @@ export const api = {
       start_date?: string | null
       end_date?: string | null
       lock_date?: string | null
+      hide_from_share?: boolean
     },
   ) {
     return request<ProjectSprint>(`/api/v2/projects/${projectId}/sprints`, {
@@ -1476,6 +1477,7 @@ export const api = {
       start_date: string | null
       end_date: string | null
       lock_date: string | null
+      hide_from_share: boolean
     }>,
   ) {
     return request<ProjectSprint>(`/api/v2/projects/${projectId}/sprints/${sprintId}`, {

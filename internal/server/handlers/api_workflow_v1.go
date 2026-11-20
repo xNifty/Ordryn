@@ -507,25 +507,29 @@ type apiProjectSprintJSON struct {
 	IsLocked    bool    `json:"is_locked"`
 	TaskCount   int     `json:"task_count"`
 	CreatedAt   string  `json:"created_at"`
+	// HideFromShare keeps the sprint's tasks off public share-link views.
+	HideFromShare bool `json:"hide_from_share"`
 	// Totals over the sprint's tasks; only the sprint list fills them.
 	TimeSpentMinutes int     `json:"time_spent_minutes"`
 	EstimateHours    float64 `json:"estimate_hours"`
 }
 
 type apiSprintCreateRequest struct {
-	Name        string  `json:"name"`
-	Description string  `json:"description"`
-	StartDate   string  `json:"start_date"`
-	EndDate     string  `json:"end_date"`
-	LockDate    *string `json:"lock_date"`
+	Name          string  `json:"name"`
+	Description   string  `json:"description"`
+	StartDate     string  `json:"start_date"`
+	EndDate       string  `json:"end_date"`
+	LockDate      *string `json:"lock_date"`
+	HideFromShare bool    `json:"hide_from_share"`
 }
 
 type apiSprintPatchRequest struct {
-	Name        *string        `json:"name"`
-	Description *string        `json:"description"`
-	StartDate   *string        `json:"start_date"`
-	EndDate     *string        `json:"end_date"`
-	LockDate    optionalString `json:"lock_date"`
+	Name          *string        `json:"name"`
+	Description   *string        `json:"description"`
+	StartDate     *string        `json:"start_date"`
+	EndDate       *string        `json:"end_date"`
+	LockDate      optionalString `json:"lock_date"`
+	HideFromShare *bool          `json:"hide_from_share"`
 }
 
 type apiSprintDeleteRequest struct {
@@ -550,17 +554,18 @@ func sprintToAPIJSON(s storage.ProjectSprint) apiProjectSprintJSON {
 		endDate = &d
 	}
 	return apiProjectSprintJSON{
-		ID:          s.ID,
-		ProjectID:   s.ProjectID,
-		Name:        s.Name,
-		Description: s.Description,
-		StartDate:   startDate,
-		EndDate:     endDate,
-		LockDate:    lockDate,
-		IsActive:    storage.SprintIsActive(s.StartDate, s.EndDate, now),
-		IsLocked:    storage.SprintIsLocked(s.LockDate, now),
-		TaskCount:   s.TaskCount,
-		CreatedAt:   s.CreatedAt.UTC().Format(time.RFC3339),
+		ID:            s.ID,
+		ProjectID:     s.ProjectID,
+		Name:          s.Name,
+		Description:   s.Description,
+		StartDate:     startDate,
+		EndDate:       endDate,
+		LockDate:      lockDate,
+		IsActive:      storage.SprintIsActive(s.StartDate, s.EndDate, now),
+		IsLocked:      storage.SprintIsLocked(s.LockDate, now),
+		TaskCount:     s.TaskCount,
+		CreatedAt:     s.CreatedAt.UTC().Format(time.RFC3339),
+		HideFromShare: s.HideFromShare,
 
 		TimeSpentMinutes: s.TimeSpentMinutes,
 		EstimateHours:    s.EstimateHours,
@@ -600,11 +605,12 @@ func handleProjectSprintsResource(w http.ResponseWriter, r *http.Request, projec
 				lockDate = *req.LockDate
 			}
 			s, err := domain.CreateProjectSprintForUser(r.Context(), userID, projectID, domain.CreateProjectSprintInput{
-				Name:        req.Name,
-				Description: req.Description,
-				StartDate:   req.StartDate,
-				EndDate:     req.EndDate,
-				LockDate:    lockDate,
+				Name:          req.Name,
+				Description:   req.Description,
+				StartDate:     req.StartDate,
+				EndDate:       req.EndDate,
+				LockDate:      lockDate,
+				HideFromShare: req.HideFromShare,
 			})
 			if err != nil {
 				writeWorkflowDomainError(w, err)
@@ -638,11 +644,12 @@ func handleProjectSprintsResource(w http.ResponseWriter, r *http.Request, projec
 			return
 		}
 		s, err := domain.UpdateProjectSprintForUser(r.Context(), userID, projectID, sprintID, domain.UpdateProjectSprintInput{
-			Name:        req.Name,
-			Description: req.Description,
-			StartDate:   req.StartDate,
-			EndDate:     req.EndDate,
-			LockDate:    req.LockDate.toPatchString(),
+			Name:          req.Name,
+			Description:   req.Description,
+			StartDate:     req.StartDate,
+			EndDate:       req.EndDate,
+			LockDate:      req.LockDate.toPatchString(),
+			HideFromShare: req.HideFromShare,
 		})
 		if err != nil {
 			writeWorkflowDomainError(w, err)

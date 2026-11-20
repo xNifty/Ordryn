@@ -296,6 +296,8 @@ func AutoCreateDueSprintsForProject(project storage.Project, now time.Time) (*st
 		StartDate: storage.FormatSprintDate(start),
 		EndDate:   storage.FormatSprintDate(end),
 		LockDate:  lockRaw,
+		// The follow-up sprint inherits share visibility from the one it replaces.
+		HideFromShare: current.HideFromShare,
 	}, map[string]interface{}{"auto": true})
 	if err != nil {
 		if strings.Contains(err.Error(), "overlap") {

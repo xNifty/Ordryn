@@ -275,6 +275,10 @@ func RunMigrations() error {
 		fmt.Printf("migration: MigrateProjectSprintsAddLockDate failed: %v\n", err)
 		errCount++
 	}
+	if err := MigrateProjectSprintsAddHideFromShare(); err != nil {
+		fmt.Printf("migration: MigrateProjectSprintsAddHideFromShare failed: %v\n", err)
+		errCount++
+	}
 	if err := MigrateProjectSprintsAllowDateless(); err != nil {
 		fmt.Printf("migration: MigrateProjectSprintsAllowDateless failed: %v\n", err)
 		errCount++

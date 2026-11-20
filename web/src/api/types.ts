@@ -153,6 +153,7 @@ export type ProjectSprint = {
   start_date?: string | null
   end_date?: string | null
   lock_date?: string | null
+  hide_from_share?: boolean
   is_active: boolean
   is_locked: boolean
   task_count: number

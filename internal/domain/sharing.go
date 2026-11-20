@@ -302,10 +302,14 @@ func RevokeShareLinkForUser(ctx context.Context, userID, linkID int) error {
 }
 
 // PublicSharePathForTask returns an app-relative path to the task on the
-// project's public share page, or "" if there is no active project share.
+// project's public share page, or "" if there is no active project share or
+// the task's sprint is hidden from share views.
 func PublicSharePathForTask(taskID int) string {
 	projectID, err := storage.GetTaskProjectID(taskID)
 	if err != nil || projectID <= 0 {
+		return ""
+	}
+	if hidden, err := storage.IsTaskHiddenFromShare(taskID); err != nil || hidden {
 		return ""
 	}
 	link, err := storage.GetLatestActiveShareLinkForScope(storage.ShareScopeProject, projectID)

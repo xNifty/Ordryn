@@ -191,6 +191,17 @@
               />
             </div>
             <small v-if="!editDateless" class="form-hint">Lock date is optional. After that day, only you can add tasks.</small>
+            <div class="form-check">
+              <input
+                :id="`edit-sprint-hide-share-${s.id}`"
+                v-model="editHideFromShare"
+                type="checkbox"
+                class="form-check-input"
+              />
+              <label class="form-check-label small" :for="`edit-sprint-hide-share-${s.id}`">
+                Hide tasks from shared project view
+              </label>
+            </div>
             <div class="d-flex gap-1">
               <button class="btn btn-sm btn-primary" type="submit" :disabled="saving">Save</button>
               <button class="btn btn-sm btn-secondary" type="button" @click="editId = null">Cancel</button>
@@ -204,6 +215,13 @@
               <span v-if="!s.start_date || !s.end_date" class="badge text-bg-secondary">dateless</span>
               <span v-if="s.is_active" class="badge text-bg-success">active</span>
               <span v-if="s.is_locked" class="badge text-bg-warning">locked</span>
+              <span
+                v-if="s.hide_from_share"
+                class="badge text-bg-secondary"
+                title="Tasks in this sprint are hidden from the shared project view"
+              >
+                <i class="bi bi-eye-slash" aria-hidden="true" /> hidden from share
+              </span>
               <button
                 v-if="isOwner"
                 class="btn btn-sm btn-link p-0"
@@ -320,6 +338,20 @@
         <small class="form-hint">Dateless sprints have no start or end dates and do not lock. Ideal for iceboxes or secondary backlogs.</small>
       </div>
       <div class="col-12">
+        <div class="form-check">
+          <input
+            :id="`new-sprint-hide-share-${project.id}`"
+            v-model="newHideFromShare"
+            type="checkbox"
+            class="form-check-input"
+          />
+          <label class="form-check-label small" :for="`new-sprint-hide-share-${project.id}`">
+            Hide tasks from shared project view
+          </label>
+        </div>
+        <small class="form-hint">Public share links won't show this sprint's tasks. Auto-created follow-up sprints keep this setting.</small>
+      </div>
+      <div class="col-12">
         <button class="btn btn-sm btn-primary" type="submit" :disabled="adding">Add sprint</button>
       </div>
     </form>
@@ -355,6 +387,7 @@ const newDateless = ref(false)
 const newStart = ref('')
 const newEnd = ref('')
 const newLock = ref('')
+const newHideFromShare = ref(false)
 const editId = ref<number | null>(null)
 const editName = ref('')
 const editDescription = ref('')
@@ -362,6 +395,7 @@ const editDateless = ref(false)
 const editStart = ref('')
 const editEnd = ref('')
 const editLock = ref('')
+const editHideFromShare = ref(false)
 
 const isKanban = computed(() => (props.project.workflow_mode || 'classic') === 'kanban')
 const isOwner = computed(() => (props.project.role || 'owner') === 'owner')
@@ -502,6 +536,7 @@ function beginEdit(s: ProjectSprint) {
   editStart.value = s.start_date || ''
   editEnd.value = s.end_date || ''
   editLock.value = s.lock_date || ''
+  editHideFromShare.value = !!s.hide_from_share
 }
 
 async function addSprint() {
@@ -526,6 +561,7 @@ async function addSprint() {
       start_date: newDateless.value ? null : newStart.value,
       end_date: newDateless.value ? null : newEnd.value,
       lock_date: newDateless.value ? null : newLock.value || null,
+      hide_from_share: newHideFromShare.value,
     })
     newName.value = ''
     newDescription.value = ''
@@ -533,6 +569,7 @@ async function addSprint() {
     newEnd.value = ''
     newLock.value = ''
     newDateless.value = false
+    newHideFromShare.value = false
     toast.push('Sprint created', 'success')
     await loadSprints()
     emit('changed')
@@ -569,6 +606,7 @@ async function saveEdit(s: ProjectSprint) {
         start_date: '',
         end_date: '',
         lock_date: null,
+        hide_from_share: editHideFromShare.value,
       })
     } else {
       await api.updateProjectSprint(props.project.id, s.id, {
@@ -577,6 +615,7 @@ async function saveEdit(s: ProjectSprint) {
         start_date: editStart.value,
         end_date: editEnd.value,
         lock_date: editLock.value || null,
+        hide_from_share: editHideFromShare.value,
       })
     }
     editId.value = null

@@ -1053,7 +1053,28 @@ func canUserAccessTask(taskID, userID int, trashed bool) (canRead bool, writeRol
 	return true, role, pid, nil
 }
 
+// TaskHiddenFromShareSQL is true when the task (alias) sits in a sprint
+// marked hide_from_share.
+func TaskHiddenFromShareSQL(alias string) string {
+	return `EXISTS (SELECT 1 FROM project_sprints hs WHERE hs.id = ` + alias + `.sprint_id AND hs.hide_from_share)`
+}
+
+// IsTaskHiddenFromShare reports whether the task sits in a sprint hidden from
+// public share-link views.
+func IsTaskHiddenFromShare(taskID int) (bool, error) {
+	pool, err := OpenDatabase()
+	if err != nil {
+		return false, err
+	}
+	defer CloseDatabase(pool)
+	var hidden bool
+	err = pool.QueryRow(context.Background(),
+		`SELECT `+TaskHiddenFromShareSQL("t")+` FROM tasks t WHERE t.id = $1`, taskID).Scan(&hidden)
+	return hidden, err
+}
+
 // ListTasksForShareLink returns a slim task list for a share scope.
+// Tasks in sprints marked hide_from_share are left out.
 func ListTasksForShareLink(scopeType string, scopeID, createdBy int) ([]map[string]interface{}, error) {
 	pool, err := OpenDatabase()
 	if err != nil {
@@ -1072,6 +1093,7 @@ func ListTasksForShareLink(scopeType string, scopeID, createdBy int) ([]map[stri
 			LEFT JOIN projects p ON p.id = t.project_id
 			LEFT JOIN project_statuses s ON s.id = t.status_id
 			WHERE t.project_id = $1 AND t.deleted_at IS NULL
+			  AND NOT `+TaskHiddenFromShareSQL("t")+`
 			ORDER BY t.completed ASC, t.position ASC, t.id ASC`, scopeID)
 	if err != nil {
 		return nil, err

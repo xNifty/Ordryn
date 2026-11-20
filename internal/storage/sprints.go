@@ -16,7 +16,7 @@ const (
 	MaxSprintDescriptionLen = 80
 	MaxProjectSprints       = 50
 
-	projectSprintSelectCols = `id, project_id, name, description, start_date, end_date, lock_date, created_at`
+	projectSprintSelectCols = `id, project_id, name, description, start_date, end_date, lock_date, created_at, hide_from_share`
 )
 
 // ProjectSprint is a named date range (or dateless sprint) on a kanban project.
@@ -29,7 +29,9 @@ type ProjectSprint struct {
 	EndDate     *time.Time
 	LockDate    *time.Time
 	CreatedAt   time.Time
-	TaskCount   int
+	// HideFromShare keeps the sprint's tasks off public share-link views.
+	HideFromShare bool
+	TaskCount     int
 	// Time totals cover every task in the sprint that is not in the trash,
 	// archived ones included: their work still happened in the sprint.
 	TimeSpentMinutes int
@@ -38,7 +40,7 @@ type ProjectSprint struct {
 
 func scanProjectSprint(row projectStatusScanner, s *ProjectSprint) error {
 	var start, end, lock sql.NullTime
-	if err := row.Scan(&s.ID, &s.ProjectID, &s.Name, &s.Description, &start, &end, &lock, &s.CreatedAt); err != nil {
+	if err := row.Scan(&s.ID, &s.ProjectID, &s.Name, &s.Description, &start, &end, &lock, &s.CreatedAt, &s.HideFromShare); err != nil {
 		return err
 	}
 	s.StartDate = nullTimePtr(start)
@@ -221,6 +223,23 @@ func MigrateProjectSprintsAddLockDate() error {
 	return nil
 }
 
+// MigrateProjectSprintsAddHideFromShare adds the flag that keeps a sprint's
+// tasks off public share-link views.
+func MigrateProjectSprintsAddHideFromShare() error {
+	pool, err := OpenDatabase()
+	if err != nil {
+		return err
+	}
+	defer CloseDatabase(pool)
+
+	_, err = pool.Exec(context.Background(),
+		`ALTER TABLE project_sprints ADD COLUMN IF NOT EXISTS hide_from_share BOOLEAN NOT NULL DEFAULT FALSE`)
+	if err != nil {
+		return fmt.Errorf("failed to add sprint hide_from_share: %v", err)
+	}
+	return nil
+}
+
 // MigrateTasksAddSprintID adds tasks.sprint_id referencing project_sprints.
 func MigrateTasksAddSprintID() error {
 	pool, err := OpenDatabase()
@@ -265,7 +284,7 @@ func ListProjectSprints(projectID int) ([]ProjectSprint, error) {
 	defer CloseDatabase(pool)
 
 	rows, err := pool.Query(context.Background(),
-		`SELECT s.id, s.project_id, s.name, s.description, s.start_date, s.end_date, s.lock_date, s.created_at,
+		`SELECT s.id, s.project_id, s.name, s.description, s.start_date, s.end_date, s.lock_date, s.created_at, s.hide_from_share,
 		        COALESCE((SELECT COUNT(*) FROM tasks t WHERE t.sprint_id = s.id AND t.deleted_at IS NULL AND NOT `+ArchivedTaskExistsSQL("t.id")+`), 0),
 		        COALESCE((SELECT SUM(e.minutes) FROM task_time_entries e JOIN tasks t ON t.id = e.task_id
 		                  WHERE t.sprint_id = s.id AND t.deleted_at IS NULL), 0),
@@ -282,7 +301,7 @@ func ListProjectSprints(projectID int) ([]ProjectSprint, error) {
 	for rows.Next() {
 		var s ProjectSprint
 		var start, end, lock sql.NullTime
-		if err := rows.Scan(&s.ID, &s.ProjectID, &s.Name, &s.Description, &start, &end, &lock, &s.CreatedAt, &s.TaskCount,
+		if err := rows.Scan(&s.ID, &s.ProjectID, &s.Name, &s.Description, &start, &end, &lock, &s.CreatedAt, &s.HideFromShare, &s.TaskCount,
 			&s.TimeSpentMinutes, &s.EstimateHours); err != nil {
 			return nil, err
 		}
@@ -330,7 +349,7 @@ func GetProjectSprint(projectID, sprintID int) (*ProjectSprint, error) {
 }
 
 // CreateProjectSprint inserts a sprint.
-func CreateProjectSprint(projectID int, name, description string, startDate, endDate, lockDate *time.Time) (*ProjectSprint, error) {
+func CreateProjectSprint(projectID int, name, description string, startDate, endDate, lockDate *time.Time, hideFromShare bool) (*ProjectSprint, error) {
 	pool, err := OpenDatabase()
 	if err != nil {
 		return nil, err
@@ -339,10 +358,10 @@ func CreateProjectSprint(projectID int, name, description string, startDate, end
 
 	var s ProjectSprint
 	err = scanProjectSprint(pool.QueryRow(context.Background(),
-		`INSERT INTO project_sprints (project_id, name, description, start_date, end_date, lock_date)
-		 VALUES ($1, $2, $3, $4::date, $5::date, $6::date)
+		`INSERT INTO project_sprints (project_id, name, description, start_date, end_date, lock_date, hide_from_share)
+		 VALUES ($1, $2, $3, $4::date, $5::date, $6::date, $7)
 		 RETURNING `+projectSprintSelectCols,
-		projectID, name, description, sprintDateArg(startDate), sprintDateArg(endDate), sprintDateArg(lockDate)), &s)
+		projectID, name, description, sprintDateArg(startDate), sprintDateArg(endDate), sprintDateArg(lockDate), hideFromShare), &s)
 	if err != nil {
 		return nil, err
 	}
@@ -350,7 +369,7 @@ func CreateProjectSprint(projectID int, name, description string, startDate, end
 }
 
 // UpdateProjectSprint updates mutable sprint fields.
-func UpdateProjectSprint(projectID, sprintID int, name, description *string, startDate, endDate, lockDate *time.Time) (*ProjectSprint, error) {
+func UpdateProjectSprint(projectID, sprintID int, name, description *string, startDate, endDate, lockDate *time.Time, hideFromShare *bool) (*ProjectSprint, error) {
 	cur, err := GetProjectSprint(projectID, sprintID)
 	if err != nil {
 		return nil, err
@@ -363,6 +382,10 @@ func UpdateProjectSprint(projectID, sprintID int, name, description *string, sta
 	if description != nil {
 		newDescription = *description
 	}
+	newHide := cur.HideFromShare
+	if hideFromShare != nil {
+		newHide = *hideFromShare
+	}
 
 	pool, err := OpenDatabase()
 	if err != nil {
@@ -371,9 +394,10 @@ func UpdateProjectSprint(projectID, sprintID int, name, description *string, sta
 	defer CloseDatabase(pool)
 
 	_, err = pool.Exec(context.Background(),
-		`UPDATE project_sprints SET name = $1, description = $2, start_date = $3::date, end_date = $4::date, lock_date = $5::date
-		 WHERE id = $6 AND project_id = $7`,
-		newName, newDescription, sprintDateArg(startDate), sprintDateArg(endDate), sprintDateArg(lockDate), sprintID, projectID)
+		`UPDATE project_sprints SET name = $1, description = $2, start_date = $3::date, end_date = $4::date, lock_date = $5::date,
+		        hide_from_share = $6
+		 WHERE id = $7 AND project_id = $8`,
+		newName, newDescription, sprintDateArg(startDate), sprintDateArg(endDate), sprintDateArg(lockDate), newHide, sprintID, projectID)
 	if err != nil {
 		return nil, err
 	}

@@ -4721,6 +4721,10 @@ paths:
                   format: date
                   nullable: true
                   description: Optional. From this UTC date onward, only the project owner can add tasks to the sprint. Cannot be set on dateless sprints. Omit or null to leave the sprint unlocked.
+                hide_from_share:
+                  type: boolean
+                  default: false
+                  description: Keep this sprint's tasks off public share-link views (e.g. an Icebox of unpromised ideas). Auto-created follow-up sprints inherit it.
       responses:
         "201":
           description: Created
@@ -4774,6 +4778,9 @@ paths:
                   format: date
                   nullable: true
                   description: Optional. From this UTC date onward, only the project owner can add tasks. Null or empty clears the lock date.
+                hide_from_share:
+                  type: boolean
+                  description: Keep this sprint's tasks off public share-link views. Omit to leave unchanged.
       responses:
         "200":
           description: Updated
@@ -13377,6 +13384,9 @@ components:
           format: date
           nullable: true
           description: Optional. From this UTC date onward, only the project owner can add tasks
+        hide_from_share:
+          type: boolean
+          description: True when this sprint's tasks are left out of public share-link views
         is_active:
           type: boolean
           description: True when today's UTC date falls in start_date..end_date inclusive

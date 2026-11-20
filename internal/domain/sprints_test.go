@@ -1422,3 +1422,125 @@ func TestBulkAssignSprintToMultipleTasks(t *testing.T) {
 		t.Fatalf("expected backlog, got %d,%d", fields[firstID].SprintID, fields[secondID].SprintID)
 	}
 }
+
+func TestSprintHideFromShare(t *testing.T) {
+	ctx := context.Background()
+	proj, err := CreateProject(ctx, 1, "Hidden Sprint Share Board", "")
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	if _, err := SetProjectWorkflowMode(ctx, 1, proj.ID, storage.WorkflowKanban); err != nil {
+		t.Fatalf("enable kanban: %v", err)
+	}
+	icebox, err := CreateProjectSprintForUser(ctx, 1, proj.ID, CreateProjectSprintInput{
+		Name:          "Icebox",
+		HideFromShare: true,
+	})
+	if err != nil {
+		t.Fatalf("create icebox: %v", err)
+	}
+	if !icebox.HideFromShare {
+		t.Fatal("expected icebox hidden from share")
+	}
+	pid := proj.ID
+	iid := icebox.ID
+	hiddenTask, err := CreateTask(ctx, 1, CreateTaskInput{Title: "Maybe someday", ProjectID: &pid, SprintID: &iid})
+	if err != nil {
+		t.Fatalf("create hidden task: %v", err)
+	}
+	visibleTask, err := CreateTask(ctx, 1, CreateTaskInput{Title: "Promised work", ProjectID: &pid})
+	if err != nil {
+		t.Fatalf("create visible task: %v", err)
+	}
+	if _, err := CreateShareLinkForScope(ctx, 1, storage.ShareScopeProject, proj.ID, nil); err != nil {
+		t.Fatalf("create link: %v", err)
+	}
+
+	sharedIDs := func() map[int]bool {
+		t.Helper()
+		items, err := storage.ListTasksForShareLink(storage.ShareScopeProject, proj.ID, 1)
+		if err != nil {
+			t.Fatalf("list share tasks: %v", err)
+		}
+		out := map[int]bool{}
+		for _, it := range items {
+			out[it["id"].(int)] = true
+		}
+		return out
+	}
+
+	ids := sharedIDs()
+	if ids[hiddenTask] || !ids[visibleTask] {
+		t.Fatalf("share ids=%v hidden=%d visible=%d", ids, hiddenTask, visibleTask)
+	}
+	if got := PublicSharePathForTask(hiddenTask); got != "" {
+		t.Fatalf("hidden task share path=%q want empty", got)
+	}
+	if got := PublicSharePathForTask(visibleTask); got == "" {
+		t.Fatal("visible task should have a share path")
+	}
+
+	show := false
+	updated, err := UpdateProjectSprintForUser(ctx, 1, proj.ID, icebox.ID, UpdateProjectSprintInput{HideFromShare: &show})
+	if err != nil {
+		t.Fatalf("unhide: %v", err)
+	}
+	if updated.HideFromShare || updated.Name != "Icebox" {
+		t.Fatalf("updated=%+v", updated)
+	}
+	if !sharedIDs()[hiddenTask] {
+		t.Fatal("task should be shared once the sprint is visible")
+	}
+
+	rename := "Icebox Ideas"
+	renamed, err := UpdateProjectSprintForUser(ctx, 1, proj.ID, icebox.ID, UpdateProjectSprintInput{Name: &rename})
+	if err != nil {
+		t.Fatalf("rename: %v", err)
+	}
+	if renamed.HideFromShare {
+		t.Fatal("omitted hide_from_share should leave the flag unchanged")
+	}
+}
+
+func TestAutoCreateNextSprintCarriesHideFromShare(t *testing.T) {
+	ctx := context.Background()
+	proj, err := CreateProject(ctx, 1, "Auto Hidden Sprint Board", "")
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	if _, err := SetProjectWorkflowMode(ctx, 1, proj.ID, storage.WorkflowKanban); err != nil {
+		t.Fatalf("enable kanban: %v", err)
+	}
+	sprint, err := CreateProjectSprintForUser(ctx, 1, proj.ID, CreateProjectSprintInput{
+		Name:          "Sprint 1",
+		StartDate:     "2098-08-01",
+		EndDate:       "2098-08-31",
+		HideFromShare: true,
+	})
+	if err != nil {
+		t.Fatalf("create sprint: %v", err)
+	}
+	pid := proj.ID
+	sid := sprint.ID
+	if _, err := CreateTask(ctx, 1, CreateTaskInput{Title: "Carry hidden work", ProjectID: &pid, SprintID: &sid}); err != nil {
+		t.Fatalf("create task: %v", err)
+	}
+	updated, err := UpdateProject(ctx, 1, proj.ID, nil, nil, nil, nil, nil, &AutoSprintPatch{
+		Enabled:    boolPtr(true),
+		LengthDays: intValPtr(30),
+	})
+	if err != nil {
+		t.Fatalf("enable auto: %v", err)
+	}
+	now, _ := time.Parse("2006-01-02", "2098-09-01")
+	created, err := AutoCreateDueSprintsForProject(*updated, now)
+	if err != nil {
+		t.Fatalf("auto create: %v", err)
+	}
+	if created == nil {
+		t.Fatal("expected next sprint")
+	}
+	if !created.HideFromShare {
+		t.Fatal("auto-created sprint should inherit hide_from_share")
+	}
+}

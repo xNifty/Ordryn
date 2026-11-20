@@ -17,6 +17,8 @@ type CreateProjectSprintInput struct {
 	StartDate   string
 	EndDate     string
 	LockDate    string
+	// HideFromShare keeps the sprint's tasks off public share-link views.
+	HideFromShare bool
 }
 
 // UpdateProjectSprintInput is a partial sprint update.
@@ -27,6 +29,8 @@ type UpdateProjectSprintInput struct {
 	EndDate     *string
 	// LockDate: nil = leave; pointer to "" = clear; pointer to YYYY-MM-DD = set.
 	LockDate *string
+	// HideFromShare: nil = leave.
+	HideFromShare *bool
 }
 
 func normalizeSprintName(raw string) (string, error) {
@@ -155,7 +159,7 @@ func createProjectSprintRecord(projectID, actorUserID int, in CreateProjectSprin
 	if n >= storage.MaxProjectSprints {
 		return nil, fmt.Errorf("%w: a maximum of %d sprints is allowed", ErrConflict, storage.MaxProjectSprints)
 	}
-	s, err := storage.CreateProjectSprint(projectID, name, desc, startPtr, endPtr, lockDate)
+	s, err := storage.CreateProjectSprint(projectID, name, desc, startPtr, endPtr, lockDate, in.HideFromShare)
 	if err != nil {
 		return nil, sprintConflictError(err)
 	}
@@ -249,7 +253,7 @@ func UpdateProjectSprintForUser(ctx context.Context, userID, projectID, sprintID
 		lockDate = nil
 	}
 
-	s, err := storage.UpdateProjectSprint(projectID, sprintID, name, description, finalStart, finalEnd, lockDate)
+	s, err := storage.UpdateProjectSprint(projectID, sprintID, name, description, finalStart, finalEnd, lockDate, in.HideFromShare)
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "sprint not found") {
 			return nil, ErrNotFound
